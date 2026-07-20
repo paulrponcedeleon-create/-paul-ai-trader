@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>{{ app_name }}</title>
-  <link rel="stylesheet" href="/static/app.css?v=20260720-5">
+  <link rel="stylesheet" href="/static/app.css?v=20260720-6">
 </head>
 <body>
   <main class="shell">
@@ -23,6 +23,13 @@
       </div>
     </header>
 
+    {% if authenticated %}
+    <nav class="main-nav" aria-label="Navegación principal">
+      <a href="/" class="active" aria-current="page">Dashboard</a>
+      <a href="/performance">Rendimiento</a>
+    </nav>
+    {% endif %}
+
     <section id="loginCard" class="card {% if authenticated %}hidden{% endif %}">
       <h2>Acceso privado</h2>
       <p>Ingresa la contraseña configurada en Render.</p>
@@ -37,6 +44,9 @@
       <section class="summary-grid">
         <article class="card metric">
           <span>Capital inicial</span><strong>$1,000.00</strong><small>MXN</small>
+        </article>
+        <article class="card metric">
+          <span>Posiciones abiertas</span><strong id="openPositionCount">0</strong><small>En seguimiento</small>
         </article>
         <article class="card metric">
           <span>Total invertido</span><strong id="totalInvested">$0.00</strong><small>MXN</small>
@@ -57,10 +67,10 @@
           <div><p class="eyebrow">PORTAFOLIO SIMULADO</p><h2>Posiciones abiertas en vivo</h2></div>
           <small id="positionsUpdated" class="muted">Esperando datos…</small>
         </div>
-        <div id="openPositions" class="positions-grid">
+        <div id="openPositions" class="positions-list">
           <p>No hay posiciones abiertas.</p>
         </div>
-        <p class="portfolio-note">Actualización automática cada 5 segundos con precios públicos de Bitso. El resultado incluye comisión taker de entrada y salida estimada.</p>
+        <p class="portfolio-note">Resumen compacto. Toca una posición para ver precio de entrada, comisiones, equilibrio y la opción de cerrarla. Actualización automática cada 5 segundos.</p>
       </section>
 
       <section class="card">
@@ -107,11 +117,31 @@
         </div>
       </section>
 
+      <dialog id="closePositionDialog" class="close-dialog">
+        <form method="dialog" class="dialog-card">
+          <div class="section-title">
+            <div><p class="eyebrow">CONFIRMAR CIERRE</p><h2 id="closeDialogBook">Cerrar posición</h2></div>
+            <button type="submit" class="icon-button" value="cancel" aria-label="Cancelar">×</button>
+          </div>
+          <div class="close-preview">
+            <div><span>Valor neto estimado</span><strong id="closeDialogValue">$0.00</strong></div>
+            <div><span>Ganancia / pérdida neta</span><strong id="closeDialogPnl">$0.00</strong><small id="closeDialogReturn">0.00%</small></div>
+            <div><span>Comisión de salida</span><strong id="closeDialogFee">$0.00</strong></div>
+            <div><span>Precio actual</span><strong id="closeDialogPrice">$0.00</strong></div>
+          </div>
+          <p class="muted">Al cerrar, el resultado deja de cambiar y pasa a Rendimiento como ganancia o pérdida realizada.</p>
+          <div class="dialog-actions">
+            <button type="submit" class="secondary" value="cancel">Cancelar</button>
+            <button type="button" id="confirmClosePosition">Cerrar posición</button>
+          </div>
+        </form>
+      </dialog>
+
       <footer>
         <p>Las señales no garantizan rendimientos. El modo real permanece bloqueado por defecto.</p>
       </footer>
     </div>
   </main>
-<script src="/static/app.js?v=20260720-5"></script>
+  <script src="/static/app.js?v=20260720-6"></script>
 </body>
 </html>
