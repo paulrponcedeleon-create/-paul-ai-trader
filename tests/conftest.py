@@ -15,24 +15,30 @@ class FakeBitsoClient:
         self.ticker_calls = 0
         self.fee_calls = 0
         self.available_books_calls = 0
+        self.rfq_pairs_calls = 0
+        self.rfq_quote_calls = 0
         self.taker_fee_rate = 0.0078
         self.prices: dict[str, float] = {
             "btc_mxn": 1_000_000.0,
             "eth_mxn": 35_000.0,
             "sol_mxn": 1_500.0,
-            "atom_mxn": 90.0,
             "xrp_mxn": 20.0,
-            "paxg_mxn": 50_000.0,
             "usdc_mxn": 18.0,
             "usdt_mxn": 18.1,
+        }
+        self.rfq_buy_prices: dict[str, float] = {
+            "ATOM": 90.0,
+            "PAXG": 50_000.0,
+        }
+        self.rfq_sell_prices: dict[str, float] = {
+            "ATOM": 89.1,
+            "PAXG": 49_500.0,
         }
         self.range_24_pct: dict[str, float] = {
             "btc_mxn": 4.0,
             "eth_mxn": 6.0,
             "sol_mxn": 9.0,
-            "atom_mxn": 7.0,
             "xrp_mxn": 8.0,
-            "paxg_mxn": 2.0,
             "usdc_mxn": 1.0,
             "usdt_mxn": 1.2,
         }
@@ -40,9 +46,7 @@ class FakeBitsoClient:
             "btc_mxn": 0.90,
             "eth_mxn": 0.50,
             "sol_mxn": 0.10,
-            "atom_mxn": 0.50,
             "xrp_mxn": 0.88,
-            "paxg_mxn": 0.50,
             "usdc_mxn": 0.50,
             "usdt_mxn": 0.50,
         }
@@ -76,6 +80,61 @@ class FakeBitsoClient:
             "success": True,
             "payload": [{"book": book} for book in self.prices],
         }
+
+    async def rfq_pairs(
+        self,
+        source: str | None = None,
+        target: str | None = None,
+    ) -> dict[str, Any]:
+        self.rfq_pairs_calls += 1
+        rows = [
+            {"source": "MXN", "target": "ATOM"},
+            {"source": "ATOM", "target": "MXN"},
+            {"source": "MXN", "target": "PAXG"},
+            {"source": "PAXG", "target": "MXN"},
+        ]
+        if source:
+            rows = [row for row in rows if row["source"] == source.upper()]
+        if target:
+            rows = [row for row in rows if row["target"] == target.upper()]
+        return {"pairs": rows}
+
+    async def rfq_quote(
+        self,
+        *,
+        source: str,
+        target: str,
+        source_amount: str | None = None,
+        target_amount: str | None = None,
+    ) -> dict[str, Any]:
+        self.rfq_quote_calls += 1
+        source = source.upper()
+        target = target.upper()
+        if source == "MXN" and target in self.rfq_buy_prices:
+            spent = float(source_amount or 0)
+            price = self.rfq_buy_prices[target]
+            received = spent / price
+            return {
+                "source": source,
+                "target": target,
+                "source_amount": str(spent),
+                "target_amount": str(received),
+                "rate": str(price),
+                "can_confirm": True,
+            }
+        if target == "MXN" and source in self.rfq_sell_prices:
+            received = float(target_amount or 0)
+            price = self.rfq_sell_prices[source]
+            sold = received / price
+            return {
+                "source": source,
+                "target": target,
+                "source_amount": str(sold),
+                "target_amount": str(received),
+                "rate": str(price),
+                "can_confirm": True,
+            }
+        raise RuntimeError(f"Par RFQ falso no soportado: {source} -> {target}")
 
     async def balance(self) -> dict[str, Any]:
         return {"success": True, "payload": {"balances": []}}
