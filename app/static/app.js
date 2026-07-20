@@ -8,6 +8,8 @@ let historyOffset = 0;
 let historyLoading = false;
 let positionsLoading = false;
 let positionRefreshTimer = null;
+let pendingCloseId = null;
+const currentPositions = new Map();
 
 async function api(url, options={}) {
   const response = await fetch(url, {
@@ -58,6 +60,18 @@ function pnlClass(value) {
   if (number > 0) return "positive";
   if (number < 0) return "negative";
   return "neutral";
+}
+
+function setText(element, text, {pulse=false, className=null}={}) {
+  if (!element) return;
+  const changed = element.textContent !== text;
+  if (changed) element.textContent = text;
+  if (className !== null) element.className = className;
+  if (changed && pulse) {
+    element.classList.remove("value-refresh");
+    void element.offsetWidth;
+    element.classList.add("value-refresh");
+  }
 }
 
 document.querySelectorAll(".book").forEach(btn => btn.addEventListener("click", async () => {
@@ -116,54 +130,96 @@ async function refreshMarket() {
 
 qs("#refreshBtn")?.addEventListener("click", refreshMarket);
 
-function renderPosition(position) {
-  const pnl = Number(position.unrealized_pnl_mxn || 0);
-  const sideLabel = position.side === "buy" ? "COMPRA" : "VENTA CORTA";
-  return `
-    <article class="position-item refreshed">
-      <div class="position-head">
-        <div>
-          <span class="position-book">${position.book.toUpperCase()}</span>
-          <small>${sideLabel} · ${new Date(position.created_at).toLocaleString("es-MX")}</small>
-        </div>
-        <span class="position-status">ABIERTA</span>
+function createPositionElement(position) {
+  const article = document.createElement("article");
+  article.className = "position-row";
+  article.dataset.positionId = position.id;
+  article.innerHTML = `
+    <button type="button" class="position-summary" data-toggle-position="${position.id}" aria-expanded="false">
+      <div class="position-identity">
+        <strong data-field="book"></strong>
+        <small data-field="meta"></small>
       </div>
+      <div class="compact-value">
+        <span>Invertido</span><strong data-field="amount"></strong>
+      </div>
+      <div class="compact-value">
+        <span>Valor neto</span><strong data-field="currentValue"></strong>
+      </div>
+      <div class="compact-result">
+        <strong data-field="pnl"></strong><small data-field="returnPct"></small>
+      </div>
+      <span class="position-chevron" aria-hidden="true">⌄</span>
+    </button>
+    <div class="position-details hidden">
       <div class="position-values">
-        <div><span>Invertido</span><strong>${formatMoney(position.amount_mxn)}</strong></div>
-        <div><span>Valor neto actual</span><strong>${formatMoney(position.current_value_mxn)}</strong></div>
-        <div><span>Precio entrada</span><strong>$${formatPrice(position.entry_price)}</strong></div>
-        <div><span>Precio actual</span><strong>$${formatPrice(position.current_price)}</strong></div>
-        <div><span>Comisión entrada</span><strong>${formatMoney(position.entry_fee_mxn)}</strong><small>${Number(position.entry_fee_percent).toFixed(3)}%</small></div>
-        <div><span>Salida estimada</span><strong>${formatMoney(position.estimated_exit_fee_mxn)}</strong><small>${Number(position.exit_fee_percent).toFixed(3)}%</small></div>
-        <div><span>Precio de equilibrio</span><strong>$${formatPrice(position.break_even_price)}</strong><small>${signedPercent(position.break_even_change_pct)}</small></div>
+        <div><span>Precio entrada</span><strong data-field="entryPrice"></strong></div>
+        <div><span>Precio actual</span><strong data-field="currentPrice"></strong></div>
+        <div><span>Cantidad virtual</span><strong data-field="quantity"></strong></div>
+        <div><span>Comisión entrada</span><strong data-field="entryFee"></strong><small data-field="entryFeePct"></small></div>
+        <div><span>Salida estimada</span><strong data-field="exitFee"></strong><small data-field="exitFeePct"></small></div>
+        <div><span>Precio de equilibrio</span><strong data-field="breakEven"></strong><small data-field="breakEvenPct"></small></div>
       </div>
-      <div class="position-result ${pnlClass(pnl)}">
-        <span>Ganancia / pérdida neta</span>
-        <strong>${signedMoney(pnl)}</strong>
-        <small>${signedPercent(position.return_pct)}</small>
-      </div>
-      <button type="button" class="secondary close-position" data-close-id="${position.id}">Cerrar simulación</button>
-    </article>`;
+      <button type="button" class="secondary close-position" data-close-id="${position.id}">Cerrar posición</button>
+    </div>`;
+  return article;
 }
 
-function pulseSummary() {
-  ["totalCurrentValue", "totalPnl", "totalReturn", "totalFees"].forEach(id => {
-    const element = qs(`#${id}`);
-    element.classList.remove("value-refresh");
-    void element.offsetWidth;
-    element.classList.add("value-refresh");
+function updatePositionElement(article, position) {
+  const pnl = Number(position.unrealized_pnl_mxn || 0);
+  const sideLabel = position.side === "buy" ? "COMPRA" : "VENTA CORTA";
+  setText(article.querySelector('[data-field="book"]'), position.book.toUpperCase());
+  setText(article.querySelector('[data-field="meta"]'), `${sideLabel} · ${new Date(position.created_at).toLocaleString("es-MX")}`);
+  setText(article.querySelector('[data-field="amount"]'), formatMoney(position.amount_mxn));
+  setText(article.querySelector('[data-field="currentValue"]'), formatMoney(position.current_value_mxn), {pulse:true});
+  setText(article.querySelector('[data-field="pnl"]'), signedMoney(pnl), {pulse:true, className:pnlClass(pnl)});
+  setText(article.querySelector('[data-field="returnPct"]'), signedPercent(position.return_pct), {pulse:true, className:pnlClass(pnl)});
+  setText(article.querySelector('[data-field="entryPrice"]'), `$${formatPrice(position.entry_price)}`);
+  setText(article.querySelector('[data-field="currentPrice"]'), `$${formatPrice(position.current_price)}`, {pulse:true});
+  setText(article.querySelector('[data-field="quantity"]'), Number(position.asset_quantity || 0).toLocaleString("es-MX", {maximumFractionDigits:12}));
+  setText(article.querySelector('[data-field="entryFee"]'), formatMoney(position.entry_fee_mxn));
+  setText(article.querySelector('[data-field="entryFeePct"]'), `${Number(position.entry_fee_percent).toFixed(3)}%`);
+  setText(article.querySelector('[data-field="exitFee"]'), formatMoney(position.estimated_exit_fee_mxn), {pulse:true});
+  setText(article.querySelector('[data-field="exitFeePct"]'), `${Number(position.exit_fee_percent).toFixed(3)}%`);
+  setText(article.querySelector('[data-field="breakEven"]'), `$${formatPrice(position.break_even_price)}`);
+  setText(article.querySelector('[data-field="breakEvenPct"]'), signedPercent(position.break_even_change_pct));
+}
+
+function syncPositions(items) {
+  const container = qs("#openPositions");
+  const incomingIds = new Set(items.map(item => item.id));
+
+  container.querySelectorAll("[data-position-id]").forEach(element => {
+    if (!incomingIds.has(element.dataset.positionId)) element.remove();
+  });
+
+  if (!items.length) {
+    currentPositions.clear();
+    container.innerHTML = "<p>No hay posiciones abiertas.</p>";
+    return;
+  }
+
+  container.querySelector("p")?.remove();
+  items.forEach(position => {
+    currentPositions.set(position.id, position);
+    let article = container.querySelector(`[data-position-id="${position.id}"]`);
+    if (!article) article = createPositionElement(position);
+    updatePositionElement(article, position);
+    container.appendChild(article);
+  });
+
+  [...currentPositions.keys()].forEach(id => {
+    if (!incomingIds.has(id)) currentPositions.delete(id);
   });
 }
 
 function updatePortfolioSummary(summary) {
-  qs("#totalInvested").textContent = formatMoney(summary.invested_mxn);
-  qs("#totalCurrentValue").textContent = formatMoney(summary.current_value_mxn);
-  qs("#totalPnl").textContent = signedMoney(summary.unrealized_pnl_mxn);
-  qs("#totalReturn").textContent = signedPercent(summary.return_pct);
-  qs("#totalFees").textContent = formatMoney(summary.estimated_fees_mxn);
-  qs("#totalPnl").className = pnlClass(summary.unrealized_pnl_mxn);
-  qs("#totalReturn").className = pnlClass(summary.unrealized_pnl_mxn);
-  pulseSummary();
+  setText(qs("#openPositionCount"), String(summary.open_positions));
+  setText(qs("#totalInvested"), formatMoney(summary.invested_mxn));
+  setText(qs("#totalCurrentValue"), formatMoney(summary.current_value_mxn), {pulse:true});
+  setText(qs("#totalPnl"), signedMoney(summary.unrealized_pnl_mxn), {pulse:true, className:pnlClass(summary.unrealized_pnl_mxn)});
+  setText(qs("#totalReturn"), signedPercent(summary.return_pct), {pulse:true, className:pnlClass(summary.unrealized_pnl_mxn)});
+  setText(qs("#totalFees"), formatMoney(summary.estimated_fees_mxn), {pulse:true});
 }
 
 async function loadPositions() {
@@ -172,9 +228,7 @@ async function loadPositions() {
   try {
     const data = await api(`/api/positions?ts=${Date.now()}`);
     updatePortfolioSummary(data.summary);
-    qs("#openPositions").innerHTML = data.items.length
-      ? data.items.map(renderPosition).join("")
-      : "<p>No hay posiciones abiertas.</p>";
+    syncPositions(data.items);
     const source = data.fee_source === "bitso_account"
       ? "comisión de tu cuenta"
       : "comisión pública de respaldo";
@@ -192,21 +246,61 @@ async function runPositionRefreshLoop() {
   positionRefreshTimer = window.setTimeout(runPositionRefreshLoop, POSITION_REFRESH_MS);
 }
 
-qs("#openPositions")?.addEventListener("click", async event => {
-  const button = event.target.closest("[data-close-id]");
-  if (!button) return;
-  if (!window.confirm("¿Cerrar esta simulación con el precio actual de Bitso y sus comisiones estimadas?")) return;
+function togglePosition(id) {
+  const article = qs(`[data-position-id="${id}"]`);
+  if (!article) return;
+  const summary = article.querySelector(".position-summary");
+  const details = article.querySelector(".position-details");
+  const expanded = summary.getAttribute("aria-expanded") === "true";
+  summary.setAttribute("aria-expanded", String(!expanded));
+  details.classList.toggle("hidden", expanded);
+  article.classList.toggle("expanded", !expanded);
+}
 
+function openCloseDialog(id) {
+  const position = currentPositions.get(id);
+  if (!position) return;
+  pendingCloseId = id;
+  const pnl = Number(position.unrealized_pnl_mxn || 0);
+  setText(qs("#closeDialogBook"), `Cerrar ${position.book.toUpperCase()}`);
+  setText(qs("#closeDialogValue"), formatMoney(position.current_value_mxn));
+  setText(qs("#closeDialogPnl"), signedMoney(pnl), {className:pnlClass(pnl)});
+  setText(qs("#closeDialogReturn"), signedPercent(position.return_pct), {className:pnlClass(pnl)});
+  setText(qs("#closeDialogFee"), formatMoney(position.estimated_exit_fee_mxn));
+  setText(qs("#closeDialogPrice"), `$${formatPrice(position.current_price)}`);
+  qs("#closePositionDialog").showModal();
+}
+
+qs("#openPositions")?.addEventListener("click", event => {
+  const closeButton = event.target.closest("[data-close-id]");
+  if (closeButton) {
+    openCloseDialog(closeButton.dataset.closeId);
+    return;
+  }
+  const toggleButton = event.target.closest("[data-toggle-position]");
+  if (toggleButton) togglePosition(toggleButton.dataset.togglePosition);
+});
+
+qs("#closePositionDialog")?.addEventListener("close", () => {
+  if (qs("#closePositionDialog").returnValue === "cancel") pendingCloseId = null;
+});
+
+qs("#confirmClosePosition")?.addEventListener("click", async () => {
+  if (!pendingCloseId) return;
+  const button = qs("#confirmClosePosition");
   button.disabled = true;
   button.textContent = "Cerrando...";
   try {
-    const closed = await api(`/api/simulations/${button.dataset.closeId}/close`, {method:"POST"});
-    qs("#orderMessage").textContent = `Simulación cerrada: ${signedMoney(closed.realized_pnl_mxn)} (${signedPercent(closed.return_pct)}), comisiones estimadas ${formatMoney(closed.total_estimated_fees_mxn)}.`;
+    const closed = await api(`/api/simulations/${pendingCloseId}/close`, {method:"POST"});
+    qs("#closePositionDialog").close();
+    qs("#orderMessage").textContent = `Posición cerrada: ${signedMoney(closed.realized_pnl_mxn)} (${signedPercent(closed.return_pct)}), comisiones ${formatMoney(closed.total_estimated_fees_mxn)}.`;
+    pendingCloseId = null;
     await Promise.all([loadPositions(), loadHistory({reset:true})]);
   } catch(error) {
-    button.disabled = false;
-    button.textContent = "Cerrar simulación";
     qs("#orderMessage").textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Cerrar posición";
   }
 });
 
