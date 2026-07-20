@@ -15,12 +15,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      APP_ENV: test
-      APP_PASSWORD: test-password
-      SESSION_SECRET: test-session-secret-with-more-than-32-characters
-      SESSION_COOKIE_SECURE: "false"
-      LIVE_TRADING: "false"
 
     steps:
       - name: Checkout
