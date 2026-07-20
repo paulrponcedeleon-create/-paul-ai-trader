@@ -43,6 +43,13 @@ function pnlClass(value) {
   return "neutral";
 }
 
+function assetSymbol(book) {
+  if (typeof window.displayMarketSymbol === "function") {
+    return window.displayMarketSymbol(book);
+  }
+  return String(book || "").replace(/_mxn$|_cash$/i, "").toUpperCase();
+}
+
 function setMetric(id, value, classValue=null) {
   const element = qs(`#${id}`);
   element.textContent = value;
@@ -187,7 +194,7 @@ function renderBookPerformance(rows) {
   const body = qs("#bookPerformance");
   body.innerHTML = rows.length ? rows.map(row => `
     <tr>
-      <td><strong>${row.book.toUpperCase()}</strong></td>
+      <td><strong>${assetSymbol(row.book)}</strong></td>
       <td>${row.operations}</td>
       <td>${row.wins}</td>
       <td class="${pnlClass(row.gross_pnl_mxn)}">${signedMoney(row.gross_pnl_mxn)}</td>
@@ -202,7 +209,7 @@ function renderOperations(rows) {
   body.innerHTML = rows.length ? rows.map(row => `
     <tr>
       <td>${new Date(row.closed_at).toLocaleString("es-MX")}</td>
-      <td><strong>${row.book.toUpperCase()}</strong></td>
+      <td><strong>${assetSymbol(row.book)}</strong></td>
       <td>${row.side === "buy" ? "Compra" : "Venta corta"}</td>
       <td>${formatMoney(row.amount_mxn)}</td>
       <td class="${pnlClass(row.gross_pnl_mxn)}">${signedMoney(row.gross_pnl_mxn)}</td>
@@ -216,7 +223,7 @@ async function loadPerformance() {
   const button = qs(".apply-filters");
   const books = selectedBooks();
   if (!books.length) {
-    qs("#filterMessage").textContent = "Selecciona al menos una criptomoneda.";
+    qs("#filterMessage").textContent = "Selecciona al menos un activo.";
     return;
   }
 
