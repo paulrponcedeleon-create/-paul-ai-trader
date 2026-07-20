@@ -12,19 +12,23 @@ class SimulationRepository(Protocol):
         ...
 
 
+HISTORY_PAGE_SIZE = 10
+
+
 def list_simulations(
     repository: SimulationRepository,
     *,
-    limit: int = 20,
+    limit: int = HISTORY_PAGE_SIZE,
     offset: int = 0,
 ) -> dict[str, Any]:
+    page_limit = min(limit, HISTORY_PAGE_SIZE)
     total = repository.count()
-    items = repository.list(limit=limit, offset=offset)
+    items = repository.list(limit=page_limit, offset=offset)
     next_offset = offset + len(items)
     has_more = next_offset < total
     return {
         "items": items,
-        "limit": limit,
+        "limit": page_limit,
         "offset": offset,
         "total": total,
         "has_more": has_more,
