@@ -1,17 +1,23 @@
 const qs = selector => document.querySelector(selector);
 const HISTORY_PAGE_SIZE = 20;
-const POSITION_REFRESH_MS = 1000;
+const POSITION_REFRESH_MS = 5000;
 
 let selectedBook = document.querySelector(".book.active")?.dataset.book || "btc_mxn";
 let marketRequestId = 0;
 let historyOffset = 0;
 let historyLoading = false;
 let positionsLoading = false;
+let positionRefreshTimer = null;
 
 async function api(url, options={}) {
   const response = await fetch(url, {
     cache: "no-store",
-    headers: {"Content-Type":"application/json", ...(options.headers||{})},
+    headers: {
+      "Content-Type":"application/json",
+      "Cache-Control":"no-cache",
+      "Pragma":"no-cache",
+      ...(options.headers||{})
+    },
     ...options
   });
   const data = await response.json().catch(()=>({detail:"Respuesta inválida"}));
@@ -92,7 +98,7 @@ async function refreshMarket() {
   qs("#statusText").textContent = "Consultando...";
   qs("#marketResult").innerHTML = `<p>Actualizando ${requestedBook.toUpperCase()}...</p>`;
   try {
-    const data = await api(`/api/market/${requestedBook}`);
+    const data = await api(`/api/market/${requestedBook}?ts=${Date.now()}`);
     if (requestId !== marketRequestId) return;
     const signal = data.signal;
     qs("#marketResult").innerHTML = `
@@ -114,7 +120,7 @@ function renderPosition(position) {
   const pnl = Number(position.unrealized_pnl_mxn || 0);
   const sideLabel = position.side === "buy" ? "COMPRA" : "VENTA CORTA";
   return `
-    <article class="position-item">
+    <article class="position-item refreshed">
       <div class="position-head">
         <div>
           <span class="position-book">${position.book.toUpperCase()}</span>
@@ -124,12 +130,15 @@ function renderPosition(position) {
       </div>
       <div class="position-values">
         <div><span>Invertido</span><strong>${formatMoney(position.amount_mxn)}</strong></div>
-        <div><span>Valor actual</span><strong>${formatMoney(position.current_value_mxn)}</strong></div>
+        <div><span>Valor neto actual</span><strong>${formatMoney(position.current_value_mxn)}</strong></div>
         <div><span>Precio entrada</span><strong>$${formatPrice(position.entry_price)}</strong></div>
         <div><span>Precio actual</span><strong>$${formatPrice(position.current_price)}</strong></div>
+        <div><span>Comisión entrada</span><strong>${formatMoney(position.entry_fee_mxn)}</strong><small>${Number(position.entry_fee_percent).toFixed(3)}%</small></div>
+        <div><span>Salida estimada</span><strong>${formatMoney(position.estimated_exit_fee_mxn)}</strong><small>${Number(position.exit_fee_percent).toFixed(3)}%</small></div>
+        <div><span>Precio de equilibrio</span><strong>$${formatPrice(position.break_even_price)}</strong><small>${signedPercent(position.break_even_change_pct)}</small></div>
       </div>
       <div class="position-result ${pnlClass(pnl)}">
-        <span>Ganancia / pérdida</span>
+        <span>Ganancia / pérdida neta</span>
         <strong>${signedMoney(pnl)}</strong>
         <small>${signedPercent(position.return_pct)}</small>
       </div>
@@ -137,25 +146,39 @@ function renderPosition(position) {
     </article>`;
 }
 
+function pulseSummary() {
+  ["totalCurrentValue", "totalPnl", "totalReturn", "totalFees"].forEach(id => {
+    const element = qs(`#${id}`);
+    element.classList.remove("value-refresh");
+    void element.offsetWidth;
+    element.classList.add("value-refresh");
+  });
+}
+
 function updatePortfolioSummary(summary) {
   qs("#totalInvested").textContent = formatMoney(summary.invested_mxn);
   qs("#totalCurrentValue").textContent = formatMoney(summary.current_value_mxn);
   qs("#totalPnl").textContent = signedMoney(summary.unrealized_pnl_mxn);
   qs("#totalReturn").textContent = signedPercent(summary.return_pct);
+  qs("#totalFees").textContent = formatMoney(summary.estimated_fees_mxn);
   qs("#totalPnl").className = pnlClass(summary.unrealized_pnl_mxn);
   qs("#totalReturn").className = pnlClass(summary.unrealized_pnl_mxn);
+  pulseSummary();
 }
 
 async function loadPositions() {
   if (positionsLoading || document.hidden) return;
   positionsLoading = true;
   try {
-    const data = await api("/api/positions");
+    const data = await api(`/api/positions?ts=${Date.now()}`);
     updatePortfolioSummary(data.summary);
     qs("#openPositions").innerHTML = data.items.length
       ? data.items.map(renderPosition).join("")
       : "<p>No hay posiciones abiertas.</p>";
-    qs("#positionsUpdated").textContent = `Actualizado ${new Date(data.updated_at).toLocaleTimeString("es-MX")}`;
+    const source = data.fee_source === "bitso_account"
+      ? "comisión de tu cuenta"
+      : "comisión pública de respaldo";
+    qs("#positionsUpdated").textContent = `Actualizado ${new Date(data.updated_at).toLocaleTimeString("es-MX")} · ${source}`;
   } catch(error) {
     qs("#positionsUpdated").textContent = `Error: ${error.message}`;
   } finally {
@@ -163,16 +186,22 @@ async function loadPositions() {
   }
 }
 
+async function runPositionRefreshLoop() {
+  window.clearTimeout(positionRefreshTimer);
+  await loadPositions();
+  positionRefreshTimer = window.setTimeout(runPositionRefreshLoop, POSITION_REFRESH_MS);
+}
+
 qs("#openPositions")?.addEventListener("click", async event => {
   const button = event.target.closest("[data-close-id]");
   if (!button) return;
-  if (!window.confirm("¿Cerrar esta simulación con el precio actual de Bitso?")) return;
+  if (!window.confirm("¿Cerrar esta simulación con el precio actual de Bitso y sus comisiones estimadas?")) return;
 
   button.disabled = true;
   button.textContent = "Cerrando...";
   try {
     const closed = await api(`/api/simulations/${button.dataset.closeId}/close`, {method:"POST"});
-    qs("#orderMessage").textContent = `Simulación cerrada: ${signedMoney(closed.realized_pnl_mxn)} (${signedPercent(closed.return_pct)})`;
+    qs("#orderMessage").textContent = `Simulación cerrada: ${signedMoney(closed.realized_pnl_mxn)} (${signedPercent(closed.return_pct)}), comisiones estimadas ${formatMoney(closed.total_estimated_fees_mxn)}.`;
     await Promise.all([loadPositions(), loadHistory({reset:true})]);
   } catch(error) {
     button.disabled = false;
@@ -197,7 +226,7 @@ qs("#orderForm")?.addEventListener("submit", async event => {
         open_orders:0
       })
     });
-    qs("#orderMessage").textContent = `Posición abierta en ${data.book.toUpperCase()} a $${formatPrice(data.reference_price)}.`;
+    qs("#orderMessage").textContent = `Posición abierta en ${data.book.toUpperCase()} a $${formatPrice(data.reference_price)}. Comisión de entrada: ${formatMoney(data.entry_fee_mxn)}.`;
     await Promise.all([loadPositions(), loadHistory({reset:true})]);
   } catch(error) {
     qs("#orderMessage").textContent = error.message;
@@ -212,7 +241,7 @@ function renderHistoryItems(items) {
     const statusLabel = item.status === "open" ? "ABIERTA" : item.status === "closed" ? "CERRADA" : "REGISTRO";
     const result = item.realized_pnl_mxn == null
       ? ""
-      : `<br><small class="${pnlClass(item.realized_pnl_mxn)}">Resultado: ${signedMoney(item.realized_pnl_mxn)}</small>`;
+      : `<br><small class="${pnlClass(item.realized_pnl_mxn)}">Resultado neto: ${signedMoney(item.realized_pnl_mxn)}</small>`;
     return `
       <div class="history-item">
         <div><strong>${item.book.toUpperCase()}</strong><br><small>${item.side.toUpperCase()} · ${statusLabel}</small></div>
@@ -231,7 +260,7 @@ async function loadHistory({reset=false}={}) {
   button.textContent = "Cargando...";
 
   try {
-    const data = await api(`/api/simulations?limit=${HISTORY_PAGE_SIZE}&offset=${offset}`);
+    const data = await api(`/api/simulations?limit=${HISTORY_PAGE_SIZE}&offset=${offset}&ts=${Date.now()}`);
     const markup = renderHistoryItems(data.items);
 
     if (reset) {
@@ -257,12 +286,11 @@ async function loadHistory({reset=false}={}) {
 qs("#loadMoreBtn")?.addEventListener("click", () => loadHistory());
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) loadPositions();
+  if (!document.hidden) runPositionRefreshLoop();
 });
 
 if (!qs("#appContent")?.classList.contains("hidden")) {
   loadHistory({reset:true});
-  loadPositions();
   refreshMarket();
-  window.setInterval(loadPositions, POSITION_REFRESH_MS);
+  runPositionRefreshLoop();
 }
