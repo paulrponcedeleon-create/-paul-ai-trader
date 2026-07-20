@@ -9,12 +9,12 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import Settings, settings
-from app.models import LoginRequest, SimulatedOrderRequest
-from app.services.bitso import BitsoClient, BitsoError
-from app.services.risk import validate_order
 from app.db.base import Base
 from app.db.session import build_engine, build_session_factory
+from app.models import LoginRequest, SimulatedOrderRequest
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
+from app.services.bitso import BitsoClient, BitsoError
+from app.services.risk import validate_order
 from app.services.store import add_simulation, list_simulations
 from app.services.strategy import momentum_signal
 
@@ -39,7 +39,11 @@ def create_app(
     current_bitso = bitso_client or BitsoClient(current_settings)
     engine = build_engine(current_settings)
     session_factory = build_session_factory(engine)
-    Base.metadata.create_all(bind=engine)
+
+    # Tests use isolated temporary databases. Real environments must apply
+    # schema changes through Alembic so alembic_version remains authoritative.
+    if current_settings.app_env == "test":
+        Base.metadata.create_all(bind=engine)
 
     application = FastAPI(title=current_settings.app_name, version="1.0.0")
     application.add_middleware(
@@ -57,6 +61,10 @@ def create_app(
     application.state.bitso = current_bitso
     application.state.db_engine = engine
     application.state.db_session_factory = session_factory
+
+    @application.on_event("shutdown")
+    def dispose_database_engine() -> None:
+        engine.dispose()
 
     @application.get("/health")
     async def health() -> dict:
