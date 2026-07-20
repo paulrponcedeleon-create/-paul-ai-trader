@@ -244,7 +244,11 @@ def create_app(
                 repository = SqlSimulatedOrderRepository(db_session)
                 saved_item = add_simulation(item, repository)
                 db_session.commit()
-                return saved_item
+                return {
+                    **saved_item,
+                    "status": "simulated",
+                    "position_status": saved_item["status"],
+                }
 
         try:
             result = await current_bitso.place_market_order(
