@@ -86,6 +86,10 @@ jobs:
                   "SELECT name FROM sqlite_master WHERE type='index'"
               )
           }
+          columns = {
+              row[1]
+              for row in connection.execute("PRAGMA table_info(simulated_orders)")
+          }
           revision = connection.execute(
               "SELECT version_num FROM alembic_version"
           ).fetchone()
@@ -95,5 +99,7 @@ jobs:
           assert "simulated_orders" in tables
           assert "ix_simulated_orders_book" in indexes
           assert "ix_simulated_orders_correlation_id" in indexes
-          assert revision == ("20260720_0001",)
+          assert "ix_simulated_orders_status" in indexes
+          assert {"closed_at", "close_price", "realized_pnl_mxn"}.issubset(columns)
+          assert revision == ("20260720_0002",)
           PY
