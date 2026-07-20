@@ -62,7 +62,7 @@ class Settings(BaseSettings):
         return {item.strip().lower() for item in value.split(",") if item.strip()}
 
     @property
-    def allowed_books_set(self) -> set[str]:
+    def live_books_set(self) -> set[str]:
         return self._parse_books(self.allowed_books)
 
     @property
@@ -70,8 +70,12 @@ class Settings(BaseSettings):
         return self._parse_books(self.simulation_books)
 
     @property
+    def allowed_books_set(self) -> set[str]:
+        return self.live_books_set if self.live_trading else self.simulation_books_set
+
+    @property
     def enabled_books_set(self) -> set[str]:
-        return self.allowed_books_set if self.live_trading else self.simulation_books_set
+        return self.allowed_books_set
 
     @model_validator(mode="after")
     def validate_security_configuration(self) -> "Settings":
@@ -85,7 +89,7 @@ class Settings(BaseSettings):
         if not database_url:
             raise ValueError("DATABASE_URL no puede estar vacío.")
 
-        if not self.allowed_books_set:
+        if not self.live_books_set:
             raise ValueError("ALLOWED_BOOKS debe contener al menos un mercado.")
         if not self.simulation_books_set:
             raise ValueError("SIMULATION_BOOKS debe contener al menos un mercado.")
