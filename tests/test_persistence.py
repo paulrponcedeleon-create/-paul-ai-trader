@@ -85,28 +85,21 @@ def test_api_simulation_history_is_paginated(client: TestClient):
         )
         assert order.status_code == 200
 
-    first = client.get("/api/simulations?limit=10&offset=0")
-    second = client.get("/api/simulations?limit=10&offset=10")
-    third = client.get("/api/simulations?limit=10&offset=20")
+    pages = [
+        client.get(f"/api/simulations?limit=5&offset={offset}")
+        for offset in (0, 5, 10, 15, 20)
+    ]
 
-    assert first.status_code == 200
-    assert first.json()["total"] == 23
-    assert len(first.json()["items"]) == 10
-    assert first.json()["has_more"] is True
-    assert first.json()["next_offset"] == 10
-
-    assert len(second.json()["items"]) == 10
-    assert second.json()["has_more"] is True
-    assert second.json()["next_offset"] == 20
-
-    assert len(third.json()["items"]) == 3
-    assert third.json()["has_more"] is False
-    assert third.json()["next_offset"] is None
+    assert all(page.status_code == 200 for page in pages)
+    assert pages[0].json()["total"] == 23
+    assert [len(page.json()["items"]) for page in pages] == [5, 5, 5, 5, 3]
+    assert [page.json()["next_offset"] for page in pages] == [5, 10, 15, 20, None]
+    assert [page.json()["has_more"] for page in pages] == [True, True, True, True, False]
 
     all_ids = [
         item["id"]
-        for page in (first.json(), second.json(), third.json())
-        for item in page["items"]
+        for page in pages
+        for item in page.json()["items"]
     ]
     assert len(all_ids) == len(set(all_ids)) == 23
     assert client.get("/api/simulations?limit=101").status_code == 422
