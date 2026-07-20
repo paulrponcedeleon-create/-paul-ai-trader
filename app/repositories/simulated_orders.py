@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -19,6 +20,23 @@ class SqlSimulatedOrderRepository:
         ).all()
         return [row.to_dict() for row in rows]
 
+    def list_open(self) -> list[dict[str, Any]]:
+        rows = self.session.scalars(
+            select(SimulatedOrder)
+            .where(
+                SimulatedOrder.status == "open",
+                SimulatedOrder.reference_price.is_not(None),
+            )
+            .order_by(SimulatedOrder.created_at.desc(), SimulatedOrder.id.desc())
+        ).all()
+        return [row.to_dict() for row in rows]
+
+    def get_open(self, simulation_id: str) -> dict[str, Any] | None:
+        row = self.session.get(SimulatedOrder, simulation_id)
+        if row is None or row.status != "open" or row.reference_price is None:
+            return None
+        return row.to_dict()
+
     def count(self) -> int:
         total = self.session.scalar(select(func.count()).select_from(SimulatedOrder))
         return int(total or 0)
@@ -27,11 +45,14 @@ class SqlSimulatedOrderRepository:
         row = SimulatedOrder(
             id=str(item["id"]),
             created_at=item["created_at"],
+            closed_at=item.get("closed_at"),
             status=str(item.get("status", "simulated")),
             book=str(item["book"]).lower(),
             side=str(item["side"]),
             amount_mxn=float(item["amount_mxn"]),
             reference_price=item.get("reference_price"),
+            close_price=item.get("close_price"),
+            realized_pnl_mxn=item.get("realized_pnl_mxn"),
             strategy_version=item.get("strategy_version"),
             signal_id=item.get("signal_id"),
             risk_decision_id=item.get("risk_decision_id"),
@@ -39,5 +60,24 @@ class SqlSimulatedOrderRepository:
             risk_check=str(item["risk_check"]),
         )
         self.session.add(row)
+        self.session.flush()
+        return row.to_dict()
+
+    def close(
+        self,
+        simulation_id: str,
+        *,
+        closed_at: datetime,
+        close_price: float,
+        realized_pnl_mxn: float,
+    ) -> dict[str, Any] | None:
+        row = self.session.get(SimulatedOrder, simulation_id)
+        if row is None or row.status != "open":
+            return None
+
+        row.status = "closed"
+        row.closed_at = closed_at
+        row.close_price = float(close_price)
+        row.realized_pnl_mxn = float(realized_pnl_mxn)
         self.session.flush()
         return row.to_dict()
