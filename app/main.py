@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 import secrets
 import time
@@ -18,6 +18,7 @@ from app.db.session import build_engine, build_session_factory
 from app.models import SimulatedOrderRequest
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
 from app.services.bitso import BitsoClient, BitsoError
+from app.services.performance import resolve_period_range, summarize_closed_orders
 from app.services.portfolio import calculate_position, summarize_positions
 from app.services.risk import validate_order
 from app.services.store import add_simulation, list_simulations
@@ -26,6 +27,7 @@ from app.services.strategy import momentum_signal
 BASE_DIR = Path(__file__).resolve().parent
 FALLBACK_TAKER_FEE_RATE = 0.0078
 FEE_CACHE_SECONDS = 900
+PERFORMANCE_TIMEZONE = "America/Ciudad_Juarez"
 
 
 def create_app(
@@ -106,6 +108,15 @@ def create_app(
         fee_cache_until = now + FEE_CACHE_SECONDS
         return {book: fee_cache[book] for book in books}, fee_cache_source
 
+    def template_context(request: Request) -> dict:
+        return {
+            "app_name": current_settings.app_name,
+            "authenticated": authenticated(request),
+            "live_trading": current_settings.live_trading,
+            "max_order": current_settings.max_order_mxn,
+            "allowed_books": sorted(current_settings.allowed_books_set),
+        }
+
     @application.on_event("shutdown")
     def dispose_database_engine() -> None:
         engine.dispose()
@@ -122,13 +133,15 @@ def create_app(
         return templates.TemplateResponse(
             request=request,
             name="index.html",
-            context={
-                "app_name": current_settings.app_name,
-                "authenticated": authenticated(request),
-                "live_trading": current_settings.live_trading,
-                "max_order": current_settings.max_order_mxn,
-                "allowed_books": sorted(current_settings.allowed_books_set),
-            },
+            context=template_context(request),
+        )
+
+    @application.get("/performance", response_class=HTMLResponse)
+    async def performance_page(request: Request):
+        return templates.TemplateResponse(
+            request=request,
+            name="performance.html",
+            context=template_context(request),
         )
 
     @application.get("/api/config")
@@ -189,6 +202,61 @@ def create_app(
         with session_factory() as db_session:
             repository = SqlSimulatedOrderRepository(db_session)
             return list_simulations(repository, limit=limit, offset=offset)
+
+    @application.get("/api/performance")
+    async def performance(
+        request: Request,
+        response: Response,
+        period: str = Query(default="30d"),
+        books: str | None = Query(default=None),
+        start: date | None = Query(default=None),
+        end: date | None = Query(default=None),
+    ):
+        require_auth(request)
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+
+        selected_books = {
+            value.strip().lower()
+            for value in (books or "").split(",")
+            if value.strip()
+        }
+        invalid_books = selected_books - current_settings.allowed_books_set
+        if invalid_books:
+            raise HTTPException(status_code=403, detail="Una o más criptomonedas no están autorizadas.")
+
+        try:
+            start_at, end_at, period_label = resolve_period_range(
+                period,
+                start_date=start,
+                end_date=end,
+                timezone_name=PERFORMANCE_TIMEZONE,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        with session_factory() as db_session:
+            repository = SqlSimulatedOrderRepository(db_session)
+            closed_orders = repository.list_closed(
+                start_at=start_at,
+                end_at=end_at,
+                books=selected_books or None,
+            )
+
+        result = summarize_closed_orders(
+            closed_orders,
+            timezone_name=PERFORMANCE_TIMEZONE,
+        )
+        return {
+            **result,
+            "period": period,
+            "period_label": period_label,
+            "selected_books": sorted(selected_books),
+            "start_at": start_at.isoformat() if start_at else None,
+            "end_at": end_at.isoformat() if end_at else None,
+            "timezone": PERFORMANCE_TIMEZONE,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     @application.get("/api/positions")
     async def positions(request: Request, response: Response):
