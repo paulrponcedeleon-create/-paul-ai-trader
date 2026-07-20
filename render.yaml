@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: paul-ai-trader
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: LIVE_TRADING
+        value: "false"
+      - key: BITSO_BASE_URL
+        value: "https://api.bitso.com/api/v3"
+      - key: MAX_ORDER_MXN
+        value: "200"
+      - key: MAX_DAILY_LOSS_MXN
+        value: "100"
+      - key: ALLOWED_BOOKS
+        value: "btc_mxn,eth_mxn,xrp_mxn,sol_mxn"

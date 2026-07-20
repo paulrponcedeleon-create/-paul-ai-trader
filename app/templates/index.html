@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>{{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">PAUL AI TRADER</p>
+        <h1>Panel de inversión</h1>
+      </div>
+      <span class="mode {{ 'live' if live_trading else 'simulation' }}">
+        {{ 'LIVE' if live_trading else 'SIMULACIÓN' }}
+      </span>
+    </header>
+
+    <section id="loginCard" class="card {% if authenticated %}hidden{% endif %}">
+      <h2>Acceso privado</h2>
+      <p>Ingresa la contraseña configurada en Render.</p>
+      <form id="loginForm">
+        <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+        <button type="submit">Entrar</button>
+      </form>
+      <p id="loginError" class="error"></p>
+    </section>
+
+    <div id="appContent" class="{% if not authenticated %}hidden{% endif %}">
+      <section class="summary-grid">
+        <article class="card metric">
+          <span>Capital inicial</span><strong>$1,000 MXN</strong>
+        </article>
+        <article class="card metric">
+          <span>Máximo por operación</span><strong>${{ '%.0f'|format(max_order) }} MXN</strong>
+        </article>
+        <article class="card metric">
+          <span>Estado</span><strong id="statusText">Listo</strong>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div><p class="eyebrow">MERCADO</p><h2>Análisis actual</h2></div>
+          <button class="secondary" id="refreshBtn">Actualizar</button>
+        </div>
+        <div class="books">
+          {% for book in allowed_books %}
+          <button class="book {% if loop.first %}active{% endif %}" data-book="{{ book }}">{{ book|upper }}</button>
+          {% endfor %}
+        </div>
+        <div id="marketResult" class="market-result">
+          <p>Presiona Actualizar para consultar Bitso.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <p class="eyebrow">ORDEN CONTROLADA</p>
+        <h2>Simular operación</h2>
+        <form id="orderForm" class="order-form">
+          <label>Mercado<select id="orderBook">
+            {% for book in allowed_books %}<option value="{{ book }}">{{ book|upper }}</option>{% endfor %}
+          </select></label>
+          <label>Acción<select id="orderSide"><option value="buy">Comprar</option><option value="sell">Vender</option></select></label>
+          <label>Monto MXN<input id="orderAmount" type="number" min="1" max="{{ max_order }}" value="100"></label>
+          <button type="submit">Registrar simulación</button>
+        </form>
+        <p id="orderMessage"></p>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div><p class="eyebrow">HISTORIAL</p><h2>Operaciones simuladas</h2></div>
+        </div>
+        <div id="history"><p>Sin operaciones todavía.</p></div>
+      </section>
+
+      <footer>
+        <p>Las señales no garantizan rendimientos. El modo real permanece bloqueado por defecto.</p>
+      </footer>
+    </div>
+  </main>
+<script src="/static/app.js"></script>
+</body>
+</html>
