@@ -10,6 +10,11 @@ DEVELOPMENT_APP_PASSWORD = "paul-demo"
 DEVELOPMENT_SESSION_SECRET = "development-only-change-this-session-secret"
 EXAMPLE_APP_PASSWORD = "replace-with-a-local-password"
 EXAMPLE_SESSION_SECRET = "replace-with-a-random-string-of-at-least-32-characters"
+DEFAULT_SIMULATION_BOOKS = (
+    "btc_mxn,eth_mxn,xrp_mxn,sol_mxn,doge_mxn,ada_mxn,ltc_mxn,link_mxn,"
+    "shib_mxn,pepe_mxn,sui_mxn,hbar_mxn,avax_mxn,dot_mxn,atom_mxn,uni_mxn,"
+    "aave_mxn,mana_mxn,gala_mxn,sand_mxn,bch_mxn,bat_mxn,comp_mxn,mkr_mxn"
+)
 
 
 class Settings(BaseSettings):
@@ -33,6 +38,7 @@ class Settings(BaseSettings):
     max_daily_loss_mxn: float = 100.0
     max_open_orders: int = 3
     allowed_books: str = "btc_mxn,eth_mxn,xrp_mxn,sol_mxn"
+    simulation_books: str = DEFAULT_SIMULATION_BOOKS
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -51,9 +57,21 @@ class Settings(BaseSettings):
             return self.session_cookie_secure
         return self.is_production
 
+    @staticmethod
+    def _parse_books(value: str) -> set[str]:
+        return {item.strip().lower() for item in value.split(",") if item.strip()}
+
     @property
     def allowed_books_set(self) -> set[str]:
-        return {x.strip().lower() for x in self.allowed_books.split(",") if x.strip()}
+        return self._parse_books(self.allowed_books)
+
+    @property
+    def simulation_books_set(self) -> set[str]:
+        return self._parse_books(self.simulation_books)
+
+    @property
+    def enabled_books_set(self) -> set[str]:
+        return self.allowed_books_set if self.live_trading else self.simulation_books_set
 
     @model_validator(mode="after")
     def validate_security_configuration(self) -> "Settings":
@@ -66,6 +84,11 @@ class Settings(BaseSettings):
         database_url = self.database_url.strip()
         if not database_url:
             raise ValueError("DATABASE_URL no puede estar vacío.")
+
+        if not self.allowed_books_set:
+            raise ValueError("ALLOWED_BOOKS debe contener al menos un mercado.")
+        if not self.simulation_books_set:
+            raise ValueError("SIMULATION_BOOKS debe contener al menos un mercado.")
 
         if self.is_production:
             insecure_session_secret = (
