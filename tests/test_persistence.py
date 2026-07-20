@@ -111,7 +111,7 @@ def test_api_simulation_history_is_paginated(client: TestClient):
     assert client.get("/api/simulations?limit=101").status_code == 422
 
 
-def test_live_simulated_position_tracks_and_closes_pnl(client, fake_bitso):
+def test_live_simulated_position_tracks_fees_and_closes_net_pnl(client, fake_bitso):
     client.post("/api/login", json={"password": "test-password"})
     fake_bitso.prices["btc_mxn"] = 100.0
 
@@ -125,7 +125,15 @@ def test_live_simulated_position_tracks_and_closes_pnl(client, fake_bitso):
     assert opened_data["status"] == "simulated"
     assert opened_data["position_status"] == "open"
     assert opened_data["reference_price"] == 100.0
-    assert opened_data["asset_quantity"] == 1.0
+    assert opened_data["entry_fee_rate"] == 0.0078
+    assert opened_data["entry_fee_mxn"] == 0.78
+    assert opened_data["asset_quantity"] == 0.9922
+
+    unchanged = client.get("/api/positions")
+    unchanged_position = unchanged.json()["items"][0]
+    assert unchanged_position["current_value_mxn"] == 98.45
+    assert unchanged_position["unrealized_pnl_mxn"] == -1.55
+    assert unchanged_position["break_even_price"] == 101.57844368903491
 
     fake_bitso.prices["btc_mxn"] = 110.0
     positions = client.get("/api/positions")
@@ -134,25 +142,33 @@ def test_live_simulated_position_tracks_and_closes_pnl(client, fake_bitso):
     position = positions.json()["items"][0]
     summary = positions.json()["summary"]
     assert position["current_price"] == 110.0
-    assert position["current_value_mxn"] == 110.0
-    assert position["unrealized_pnl_mxn"] == 10.0
-    assert position["return_pct"] == 10.0
+    assert position["current_value_mxn"] == 108.29
+    assert position["unrealized_pnl_mxn"] == 8.29
+    assert position["return_pct"] == 8.2907
+    assert position["estimated_exit_fee_mxn"] == 0.85
+    assert position["total_estimated_fees_mxn"] == 1.63
     assert summary == {
         "open_positions": 1,
         "invested_mxn": 100.0,
-        "current_value_mxn": 110.0,
-        "unrealized_pnl_mxn": 10.0,
-        "return_pct": 10.0,
+        "current_value_mxn": 108.29,
+        "unrealized_pnl_mxn": 8.29,
+        "estimated_fees_mxn": 1.63,
+        "return_pct": 8.29,
     }
-    assert positions.json()["fees_included"] is False
+    assert positions.json()["fees_included"] is True
+    assert positions.json()["fee_source"] == "bitso_account"
+    assert positions.json()["refresh_seconds"] == 5
+    assert fake_bitso.fee_calls == 1
 
     closed = client.post(f"/api/simulations/{opened_data['id']}/close")
 
     assert closed.status_code == 200
     assert closed.json()["status"] == "closed"
     assert closed.json()["close_price"] == 110.0
-    assert closed.json()["realized_pnl_mxn"] == 10.0
-    assert closed.json()["return_pct"] == 10.0
+    assert closed.json()["exit_fee_rate"] == 0.0078
+    assert closed.json()["exit_fee_mxn"] == 0.85
+    assert closed.json()["realized_pnl_mxn"] == 8.29
+    assert closed.json()["return_pct"] == 8.2907
 
     no_open_positions = client.get("/api/positions")
     assert no_open_positions.json()["items"] == []
@@ -160,7 +176,7 @@ def test_live_simulated_position_tracks_and_closes_pnl(client, fake_bitso):
 
     history = client.get("/api/simulations")
     assert history.json()["items"][0]["status"] == "closed"
-    assert history.json()["items"][0]["realized_pnl_mxn"] == 10.0
+    assert history.json()["items"][0]["realized_pnl_mxn"] == 8.29
     assert client.post(f"/api/simulations/{opened_data['id']}/close").status_code == 404
 
 
