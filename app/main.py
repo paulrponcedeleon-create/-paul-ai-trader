@@ -8,10 +8,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.api.dependencies import authenticated, require_auth
+from app.api.routes.auth import router as auth_router
 from app.config import Settings, settings
 from app.db.base import Base
 from app.db.session import build_engine, build_session_factory
-from app.models import LoginRequest, SimulatedOrderRequest
+from app.models import SimulatedOrderRequest
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
 from app.services.bitso import BitsoClient, BitsoError
 from app.services.risk import validate_order
@@ -19,16 +21,6 @@ from app.services.store import add_simulation, list_simulations
 from app.services.strategy import momentum_signal
 
 BASE_DIR = Path(__file__).resolve().parent
-SESSION_AUTH_KEY = "authenticated"
-
-
-def authenticated(request: Request) -> bool:
-    return request.session.get(SESSION_AUTH_KEY) is True
-
-
-def require_auth(request: Request) -> None:
-    if not authenticated(request):
-        raise HTTPException(status_code=401, detail="Inicia sesión.")
 
 
 def create_app(
@@ -61,6 +53,7 @@ def create_app(
     application.state.bitso = current_bitso
     application.state.db_engine = engine
     application.state.db_session_factory = session_factory
+    application.include_router(auth_router)
 
     @application.on_event("shutdown")
     def dispose_database_engine() -> None:
@@ -86,19 +79,6 @@ def create_app(
                 "allowed_books": sorted(current_settings.allowed_books_set),
             },
         )
-
-    @application.post("/api/login")
-    async def login(body: LoginRequest, request: Request):
-        if not secrets.compare_digest(body.password, current_settings.app_password):
-            raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
-        request.session.clear()
-        request.session[SESSION_AUTH_KEY] = True
-        return {"ok": True}
-
-    @application.post("/api/logout")
-    async def logout(request: Request):
-        request.session.clear()
-        return {"ok": True}
 
     @application.get("/api/config")
     async def config(request: Request):
