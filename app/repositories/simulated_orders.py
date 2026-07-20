@@ -54,6 +54,10 @@ class SqlSimulatedOrderRepository:
             amount_mxn=float(item["amount_mxn"]),
             reference_price=item.get("reference_price"),
             close_price=item.get("close_price"),
+            entry_fee_rate=item.get("entry_fee_rate"),
+            entry_fee_mxn=item.get("entry_fee_mxn"),
+            exit_fee_rate=item.get("exit_fee_rate"),
+            exit_fee_mxn=item.get("exit_fee_mxn"),
             realized_pnl_mxn=item.get("realized_pnl_mxn"),
             strategy_version=item.get("strategy_version"),
             signal_id=item.get("signal_id"),
@@ -71,6 +75,8 @@ class SqlSimulatedOrderRepository:
         *,
         closed_at: datetime,
         close_price: float,
+        exit_fee_rate: float,
+        exit_fee_mxn: float,
         realized_pnl_mxn: float,
     ) -> dict[str, Any] | None:
         row = self.session.get(SimulatedOrder, simulation_id)
@@ -80,6 +86,8 @@ class SqlSimulatedOrderRepository:
         row.status = "closed"
         row.closed_at = closed_at
         row.close_price = float(close_price)
+        row.exit_fee_rate = float(exit_fee_rate)
+        row.exit_fee_mxn = float(exit_fee_mxn)
         row.realized_pnl_mxn = float(realized_pnl_mxn)
         self.session.flush()
         return row.to_dict()
