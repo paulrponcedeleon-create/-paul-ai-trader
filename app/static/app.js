@@ -26,6 +26,20 @@ qs("#loginForm")?.addEventListener("submit", async e => {
   } catch(err) { qs("#loginError").textContent = err.message; }
 });
 
+qs("#logoutBtn")?.addEventListener("click", async () => {
+  const button = qs("#logoutBtn");
+  button.disabled = true;
+  button.textContent = "Saliendo...";
+  try {
+    await api("/api/logout", {method:"POST"});
+    location.reload();
+  } catch(err) {
+    button.disabled = false;
+    button.textContent = "Cerrar sesión";
+    qs("#statusText").textContent = err.message;
+  }
+});
+
 async function refreshMarket() {
   qs("#statusText").textContent = "Consultando...";
   try {
