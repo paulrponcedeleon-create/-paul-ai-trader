@@ -12,7 +12,7 @@ class SimulationRepository(Protocol):
         ...
 
 
-HISTORY_PAGE_SIZE = 10
+HISTORY_PAGE_SIZE = 5
 
 
 def list_simulations(
