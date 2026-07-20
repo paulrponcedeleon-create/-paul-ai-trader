@@ -100,6 +100,14 @@ jobs:
           assert "ix_simulated_orders_book" in indexes
           assert "ix_simulated_orders_correlation_id" in indexes
           assert "ix_simulated_orders_status" in indexes
-          assert {"closed_at", "close_price", "realized_pnl_mxn"}.issubset(columns)
-          assert revision == ("20260720_0002",)
+          assert {
+              "closed_at",
+              "close_price",
+              "realized_pnl_mxn",
+              "entry_fee_rate",
+              "entry_fee_mxn",
+              "exit_fee_rate",
+              "exit_fee_mxn",
+          }.issubset(columns)
+          assert revision == ("20260720_0003",)
           PY
