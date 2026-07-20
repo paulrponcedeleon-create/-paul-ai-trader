@@ -111,6 +111,58 @@ def test_api_simulation_history_is_paginated(client: TestClient):
     assert client.get("/api/simulations?limit=101").status_code == 422
 
 
+def test_live_simulated_position_tracks_and_closes_pnl(client, fake_bitso):
+    client.post("/api/login", json={"password": "test-password"})
+    fake_bitso.prices["btc_mxn"] = 100.0
+
+    opened = client.post(
+        "/api/orders",
+        json={"book": "btc_mxn", "side": "buy", "amount_mxn": 100},
+    )
+
+    assert opened.status_code == 200
+    opened_data = opened.json()
+    assert opened_data["status"] == "open"
+    assert opened_data["reference_price"] == 100.0
+    assert opened_data["asset_quantity"] == 1.0
+
+    fake_bitso.prices["btc_mxn"] = 110.0
+    positions = client.get("/api/positions")
+
+    assert positions.status_code == 200
+    position = positions.json()["items"][0]
+    summary = positions.json()["summary"]
+    assert position["current_price"] == 110.0
+    assert position["current_value_mxn"] == 110.0
+    assert position["unrealized_pnl_mxn"] == 10.0
+    assert position["return_pct"] == 10.0
+    assert summary == {
+        "open_positions": 1,
+        "invested_mxn": 100.0,
+        "current_value_mxn": 110.0,
+        "unrealized_pnl_mxn": 10.0,
+        "return_pct": 10.0,
+    }
+    assert positions.json()["fees_included"] is False
+
+    closed = client.post(f"/api/simulations/{opened_data['id']}/close")
+
+    assert closed.status_code == 200
+    assert closed.json()["status"] == "closed"
+    assert closed.json()["close_price"] == 110.0
+    assert closed.json()["realized_pnl_mxn"] == 10.0
+    assert closed.json()["return_pct"] == 10.0
+
+    no_open_positions = client.get("/api/positions")
+    assert no_open_positions.json()["items"] == []
+    assert no_open_positions.json()["summary"]["open_positions"] == 0
+
+    history = client.get("/api/simulations")
+    assert history.json()["items"][0]["status"] == "closed"
+    assert history.json()["items"][0]["realized_pnl_mxn"] == 10.0
+    assert client.post(f"/api/simulations/{opened_data['id']}/close").status_code == 404
+
+
 def test_api_simulation_survives_application_restart(test_settings, fake_bitso, tmp_path):
     db_url = f"sqlite:///{tmp_path / 'api.db'}"
     test_settings.database_url = db_url
@@ -133,9 +185,11 @@ def test_api_simulation_survives_application_restart(test_settings, fake_bitso, 
     with TestClient(second_app) as second_client:
         second_client.post("/api/login", json={"password": "test-password"})
         history = second_client.get("/api/simulations")
+        positions = second_client.get("/api/positions")
 
     assert history.status_code == 200
     assert history.json()["items"][0]["id"] == created_id
     assert history.json()["total"] == 1
     assert history.json()["has_more"] is False
+    assert positions.json()["items"][0]["id"] == created_id
     assert fake_bitso.place_order_calls == 0
