@@ -16,6 +16,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      PYTHONPATH: .
 
     steps:
       - name: Checkout
@@ -37,7 +39,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          pytest -q --tb=short > pytest-output.txt 2>&1
+          python -m pytest -q --tb=short > pytest-output.txt 2>&1
           exit_code=$?
           cat pytest-output.txt
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
