@@ -12,6 +12,8 @@ class FakeBitsoClient:
     def __init__(self) -> None:
         self.place_order_calls = 0
         self.ticker_calls = 0
+        self.fee_calls = 0
+        self.taker_fee_rate = 0.0078
         self.prices: dict[str, float] = {
             "btc_mxn": 100.0,
             "eth_mxn": 100.0,
@@ -34,6 +36,22 @@ class FakeBitsoClient:
 
     async def balance(self) -> dict[str, Any]:
         return {"success": True, "payload": {"balances": []}}
+
+    async def fees(self) -> dict[str, Any]:
+        self.fee_calls += 1
+        return {
+            "success": True,
+            "payload": {
+                "fees": [
+                    {
+                        "book": book,
+                        "taker_fee_decimal": str(self.taker_fee_rate),
+                        "taker_fee_percent": str(self.taker_fee_rate * 100),
+                    }
+                    for book in self.prices
+                ]
+            },
+        }
 
     async def place_market_order(
         self, book: str, side: str, amount_mxn: float
