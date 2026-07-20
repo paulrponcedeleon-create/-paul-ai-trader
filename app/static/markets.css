@@ -87,32 +87,35 @@
   word-break: break-word;
 }
 
-.signal-buy {
+.market-book.signal-buy,
+.market-book.signal-buy.active {
   background: #ecfdf3;
   color: #067647;
 }
 
-.signal-buy .market-action {
+.market-book.signal-buy .market-action {
   background: #067647;
   color: #fff;
 }
 
-.signal-hold {
+.market-book.signal-hold,
+.market-book.signal-hold.active {
   background: #eff8ff;
   color: #175cd3;
 }
 
-.signal-hold .market-action {
+.market-book.signal-hold .market-action {
   background: #175cd3;
   color: #fff;
 }
 
-.signal-sell {
+.market-book.signal-sell,
+.market-book.signal-sell.active {
   background: #fef3f2;
   color: #b42318;
 }
 
-.signal-sell .market-action {
+.market-book.signal-sell .market-action {
   background: #b42318;
   color: #fff;
 }
