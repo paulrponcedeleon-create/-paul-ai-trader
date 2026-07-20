@@ -67,24 +67,38 @@ async def market(book: str, request: Request, response: Response):
         raise HTTPException(status_code=403, detail="Mercado no autorizado.")
 
     try:
-        quote = await _market_service(request).quote(book, force=True)
-        signal = momentum_signal(
-            last=float(quote["last"]),
-            high=float(quote["high"]),
-            low=float(quote["low"]),
-            volume=float(quote.get("volume", 0)),
-        ) if quote["asset_type"] != "cash" else None
+        quote = await _market_service(request).quote(book, force=True, side="buy")
+        signal = (
+            momentum_signal(
+                last=float(quote["last"]),
+                high=float(quote["high"]),
+                low=float(quote["low"]),
+                volume=float(quote.get("volume", 0)),
+            )
+            if quote["asset_type"] != "cash" and quote["source"] != "bitso_rfq"
+            else None
+        )
     except (UnifiedMarketError, BitsoError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    if quote["asset_type"] == "cash":
+        reason = "Efectivo disponible; no tiene movimiento de mercado."
+        confidence = 100
+    elif quote["source"] == "bitso_rfq":
+        reason = "Conversión disponible en Bitso App; no hay rango Alpha de 24 h comparable."
+        confidence = 50
+    else:
+        reason = signal.reason
+        confidence = signal.confidence
 
     signal_payload = (
         signal.__dict__
         if signal is not None
         else {
             "action": "hold",
-            "confidence": 100,
-            "reason": "Efectivo disponible; no tiene movimiento de mercado.",
-            "reference_price": 1.0,
+            "confidence": confidence,
+            "reason": reason,
+            "reference_price": float(quote["last"]),
         }
     )
     return {
@@ -109,8 +123,13 @@ async def positions(request: Request, response: Response):
     items = []
     fee_sources: set[str] = set()
     for item in open_orders:
+        close_side = "sell" if item["side"] == "buy" else "buy"
         try:
-            quote = await service.quote(str(item["book"]), force=True)
+            quote = await service.quote(
+                str(item["book"]),
+                force=True,
+                side=close_side,
+            )
         except (UnifiedMarketError, BitsoError) as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         fee_sources.add(str(quote["fee_source"]))
@@ -125,7 +144,9 @@ async def positions(request: Request, response: Response):
                 "name": quote["name"],
                 "asset_type": quote["asset_type"],
                 "route": quote["route"],
+                "route_label": quote.get("route_label"),
                 "quote_source": quote["source"],
+                "fee_included_in_quote": quote.get("fee_included_in_quote", False),
                 "delayed": quote["delayed"],
             }
         )
@@ -152,8 +173,13 @@ async def close_simulation(simulation_id: str, request: Request):
     if open_order is None:
         raise HTTPException(status_code=404, detail="La posición no existe o ya fue cerrada.")
 
+    close_side = "sell" if open_order["side"] == "buy" else "buy"
     try:
-        quote = await _market_service(request).quote(str(open_order["book"]), force=True)
+        quote = await _market_service(request).quote(
+            str(open_order["book"]),
+            force=True,
+            side=close_side,
+        )
     except (UnifiedMarketError, BitsoError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -209,7 +235,11 @@ async def order(body: SimulatedOrderRequest, request: Request):
 
     book = body.book.lower()
     try:
-        quote = await _market_service(request).quote(book, force=True)
+        quote = await _market_service(request).quote(
+            book,
+            force=True,
+            side=body.side,
+        )
     except (UnifiedMarketError, BitsoError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     if not quote["tradeable"]:
@@ -257,5 +287,7 @@ async def order(body: SimulatedOrderRequest, request: Request):
         "name": quote["name"],
         "asset_type": quote["asset_type"],
         "route": quote["route"],
+        "route_label": quote.get("route_label"),
         "fee_source": quote["fee_source"],
+        "fee_included_in_quote": quote.get("fee_included_in_quote", False),
     }
