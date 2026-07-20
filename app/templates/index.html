@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>{{ app_name }}</title>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v=20260720-3">
 </head>
 <body>
   <main class="shell">
@@ -80,6 +80,10 @@
           <div><p class="eyebrow">HISTORIAL</p><h2>Operaciones simuladas</h2></div>
         </div>
         <div id="history"><p>Sin operaciones todavía.</p></div>
+        <p id="historyMeta" class="history-meta"></p>
+        <div class="history-actions">
+          <button type="button" class="secondary hidden" id="loadMoreBtn">Cargar más</button>
+        </div>
       </section>
 
       <footer>
@@ -87,6 +91,6 @@
       </footer>
     </div>
   </main>
-<script src="/static/app.js?v=20260720-2"></script>
+<script src="/static/app.js?v=20260720-3"></script>
 </body>
 </html>
