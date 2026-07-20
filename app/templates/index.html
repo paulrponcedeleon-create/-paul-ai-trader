@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>{{ app_name }}</title>
-  <link rel="stylesheet" href="/static/app.css?v=20260720-3">
+  <link rel="stylesheet" href="/static/app.css?v=20260720-4">
 </head>
 <body>
   <main class="shell">
@@ -36,20 +36,37 @@
     <div id="appContent" class="{% if not authenticated %}hidden{% endif %}">
       <section class="summary-grid">
         <article class="card metric">
-          <span>Capital inicial</span><strong>$1,000 MXN</strong>
+          <span>Capital inicial</span><strong>$1,000.00</strong><small>MXN</small>
         </article>
         <article class="card metric">
-          <span>Máximo por operación</span><strong>${{ '%.0f'|format(max_order) }} MXN</strong>
+          <span>Total invertido</span><strong id="totalInvested">$0.00</strong><small>MXN</small>
         </article>
         <article class="card metric">
-          <span>Estado</span><strong id="statusText">Listo</strong>
+          <span>Valor actual</span><strong id="totalCurrentValue">$0.00</strong><small>MXN</small>
         </article>
+        <article class="card metric">
+          <span>Ganancia / pérdida</span><strong id="totalPnl">$0.00</strong><small id="totalReturn">0.00%</small>
+        </article>
+      </section>
+
+      <section class="card portfolio-card">
+        <div class="section-title">
+          <div><p class="eyebrow">PORTAFOLIO SIMULADO</p><h2>Posiciones abiertas en vivo</h2></div>
+          <small id="positionsUpdated" class="muted">Esperando datos…</small>
+        </div>
+        <div id="openPositions" class="positions-grid">
+          <p>No hay posiciones abiertas.</p>
+        </div>
+        <p class="portfolio-note">Se actualiza automáticamente con precios públicos de Bitso. Resultado estimado sin comisiones.</p>
       </section>
 
       <section class="card">
         <div class="section-title">
           <div><p class="eyebrow">MERCADO</p><h2>Análisis actual</h2></div>
-          <button class="secondary" id="refreshBtn">Actualizar</button>
+          <div class="market-actions">
+            <small id="statusText" class="muted">Listo</small>
+            <button class="secondary" id="refreshBtn">Actualizar</button>
+          </div>
         </div>
         <div class="books">
           {% for book in allowed_books %}
@@ -63,15 +80,16 @@
 
       <section class="card">
         <p class="eyebrow">ORDEN CONTROLADA</p>
-        <h2>Simular operación</h2>
+        <h2>Abrir posición simulada</h2>
         <form id="orderForm" class="order-form">
           <label>Mercado<select id="orderBook">
             {% for book in allowed_books %}<option value="{{ book }}">{{ book|upper }}</option>{% endfor %}
           </select></label>
-          <label>Acción<select id="orderSide"><option value="buy">Comprar</option><option value="sell">Vender</option></select></label>
+          <label>Acción<select id="orderSide"><option value="buy">Comprar</option><option value="sell">Vender (corta)</option></select></label>
           <label>Monto MXN<input id="orderAmount" type="number" min="1" max="{{ max_order }}" value="100"></label>
-          <button type="submit">Registrar simulación</button>
+          <button type="submit">Abrir simulación</button>
         </form>
+        <p class="muted">Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN.</p>
         <p id="orderMessage"></p>
       </section>
 
@@ -91,6 +109,6 @@
       </footer>
     </div>
   </main>
-<script src="/static/app.js?v=20260720-3"></script>
+<script src="/static/app.js?v=20260720-4"></script>
 </body>
 </html>
