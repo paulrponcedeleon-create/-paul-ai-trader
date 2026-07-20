@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Rendimiento · {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css?v=20260720-6">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">PAUL AI TRADER</p>
+        <h1>Rendimiento</h1>
+      </div>
+      <div class="section-title">
+        <span class="mode {{ 'live' if live_trading else 'simulation' }}">
+          {{ 'LIVE' if live_trading else 'SIMULACIÓN' }}
+        </span>
+        {% if authenticated %}
+        <button type="button" class="secondary" id="logoutBtn">Cerrar sesión</button>
+        {% endif %}
+      </div>
+    </header>
+
+    {% if authenticated %}
+    <nav class="main-nav" aria-label="Navegación principal">
+      <a href="/">Dashboard</a>
+      <a href="/performance" class="active" aria-current="page">Rendimiento</a>
+    </nav>
+    {% endif %}
+
+    <section id="loginCard" class="card {% if authenticated %}hidden{% endif %}">
+      <h2>Acceso privado</h2>
+      <p>Ingresa la contraseña configurada en Render.</p>
+      <form id="loginForm">
+        <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+        <button type="submit">Entrar</button>
+      </form>
+      <p id="loginError" class="error"></p>
+    </section>
+
+    <div id="performanceContent" class="{% if not authenticated %}hidden{% endif %}">
+      <section class="card filters-card">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">FILTROS</p>
+            <h2>Periodo y criptomonedas</h2>
+          </div>
+          <small id="performanceUpdated" class="muted">Esperando datos…</small>
+        </div>
+
+        <form id="performanceFilters" class="performance-filters">
+          <label>Periodo
+            <select id="periodFilter">
+              <option value="today">Hoy</option>
+              <option value="7d">Últimos 7 días</option>
+              <option value="30d" selected>Últimos 30 días</option>
+              <option value="month">Mes actual</option>
+              <option value="year">Año actual</option>
+              <option value="all">Todo el historial</option>
+              <option value="custom">Rango personalizado</option>
+            </select>
+          </label>
+          <label class="custom-date hidden" data-custom-date>Desde
+            <input id="startDate" type="date">
+          </label>
+          <label class="custom-date hidden" data-custom-date>Hasta
+            <input id="endDate" type="date">
+          </label>
+
+          <fieldset class="crypto-filter">
+            <legend>Criptomonedas</legend>
+            <div class="filter-actions">
+              <button type="button" class="text-button" id="selectAllBooks">Todas</button>
+              <button type="button" class="text-button" id="clearBooks">Ninguna</button>
+            </div>
+            <div class="book-checks">
+              {% for book in allowed_books %}
+              <label class="book-check">
+                <input type="checkbox" name="performanceBook" value="{{ book }}" checked>
+                <span>{{ book|upper }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+          <button type="submit" class="apply-filters">Aplicar filtros</button>
+        </form>
+        <p id="filterMessage" class="error"></p>
+      </section>
+
+      <section class="summary-grid performance-summary">
+        <article class="card metric">
+          <span>Ganancia bruta</span><strong id="grossPnl">$0.00</strong><small>Antes de comisiones</small>
+        </article>
+        <article class="card metric">
+          <span>Comisiones</span><strong id="performanceFees">$0.00</strong><small>Entrada + salida</small>
+        </article>
+        <article class="card metric">
+          <span>Ganancia neta</span><strong id="netPnl">$0.00</strong><small id="netReturn">0.00%</small>
+        </article>
+        <article class="card metric">
+          <span>Operaciones cerradas</span><strong id="closedOperations">0</strong><small id="winsLosses">0 ganadas · 0 perdidas</small>
+        </article>
+        <article class="card metric">
+          <span>Porcentaje de aciertos</span><strong id="winRate">0.00%</strong><small>Solo resultados definidos</small>
+        </article>
+        <article class="card metric">
+          <span>Mejor / peor operación</span><strong id="bestTrade">$0.00</strong><small id="worstTrade">$0.00</small>
+        </article>
+      </section>
+
+      <section class="analytics-grid">
+        <article class="card chart-card">
+          <div class="section-title">
+            <div><p class="eyebrow">RESULTADO DIARIO</p><h2>Ganancia o pérdida neta por día</h2></div>
+          </div>
+          <div id="dailyChart" class="bar-chart empty-chart">Sin operaciones cerradas en el periodo.</div>
+        </article>
+
+        <article class="card chart-card">
+          <div class="section-title">
+            <div><p class="eyebrow">ACUMULADO</p><h2>Ganancia neta acumulada</h2></div>
+          </div>
+          <div id="cumulativeChart" class="line-chart empty-chart">Sin operaciones cerradas en el periodo.</div>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div><p class="eyebrow">POR CRIPTOMONEDA</p><h2>Comparación de resultados</h2></div>
+        </div>
+        <div class="table-wrap">
+          <table class="performance-table">
+            <thead>
+              <tr>
+                <th>Cripto</th><th>Ops.</th><th>Ganadas</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>Rendimiento</th>
+              </tr>
+            </thead>
+            <tbody id="bookPerformance">
+              <tr><td colspan="7">Sin resultados.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div><p class="eyebrow">DETALLE</p><h2>Operaciones cerradas</h2></div>
+          <small id="performancePeriodLabel" class="muted"></small>
+        </div>
+        <div class="table-wrap">
+          <table class="performance-table">
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Cripto</th><th>Acción</th><th>Invertido</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>%</th>
+              </tr>
+            </thead>
+            <tbody id="performanceOperations">
+              <tr><td colspan="8">Sin operaciones cerradas.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        <p>Los resultados corresponden a simulaciones cerradas y consideran las comisiones estimadas registradas en cada posición.</p>
+      </footer>
+    </div>
+  </main>
+  <script src="/static/performance.js?v=20260720-1"></script>
+</body>
+</html>
