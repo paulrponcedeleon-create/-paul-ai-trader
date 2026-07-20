@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>{{ app_name }}</title>
-  <link rel="stylesheet" href="/static/app.css?v=20260720-4">
+  <link rel="stylesheet" href="/static/app.css?v=20260720-5">
 </head>
 <body>
   <main class="shell">
@@ -42,10 +42,13 @@
           <span>Total invertido</span><strong id="totalInvested">$0.00</strong><small>MXN</small>
         </article>
         <article class="card metric">
-          <span>Valor actual</span><strong id="totalCurrentValue">$0.00</strong><small>MXN</small>
+          <span>Valor neto actual</span><strong id="totalCurrentValue">$0.00</strong><small>Después de comisiones</small>
         </article>
         <article class="card metric">
           <span>Ganancia / pérdida</span><strong id="totalPnl">$0.00</strong><small id="totalReturn">0.00%</small>
+        </article>
+        <article class="card metric">
+          <span>Comisiones estimadas</span><strong id="totalFees">$0.00</strong><small>Entrada + salida</small>
         </article>
       </section>
 
@@ -57,7 +60,7 @@
         <div id="openPositions" class="positions-grid">
           <p>No hay posiciones abiertas.</p>
         </div>
-        <p class="portfolio-note">Se actualiza automáticamente con precios públicos de Bitso. Resultado estimado sin comisiones.</p>
+        <p class="portfolio-note">Actualización automática cada 5 segundos con precios públicos de Bitso. El resultado incluye comisión taker de entrada y salida estimada.</p>
       </section>
 
       <section class="card">
@@ -89,7 +92,7 @@
           <label>Monto MXN<input id="orderAmount" type="number" min="1" max="{{ max_order }}" value="100"></label>
           <button type="submit">Abrir simulación</button>
         </form>
-        <p class="muted">Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN.</p>
+        <p class="muted">Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN. Las órdenes de mercado se calculan como taker.</p>
         <p id="orderMessage"></p>
       </section>
 
@@ -109,6 +112,6 @@
       </footer>
     </div>
   </main>
-<script src="/static/app.js?v=20260720-4"></script>
+<script src="/static/app.js?v=20260720-5"></script>
 </body>
 </html>
