@@ -11,14 +11,23 @@ from app.main import create_app
 class FakeBitsoClient:
     def __init__(self) -> None:
         self.place_order_calls = 0
+        self.ticker_calls = 0
+        self.prices: dict[str, float] = {
+            "btc_mxn": 100.0,
+            "eth_mxn": 100.0,
+            "sol_mxn": 100.0,
+            "xrp_mxn": 100.0,
+        }
 
     async def ticker(self, book: str) -> dict[str, Any]:
+        self.ticker_calls += 1
+        last = self.prices.get(book, 100.0)
         return {
             "payload": {
                 "book": book,
-                "last": "100",
-                "high": "110",
-                "low": "90",
+                "last": str(last),
+                "high": str(last * 1.1),
+                "low": str(last * 0.9),
                 "volume": "10",
             }
         }
