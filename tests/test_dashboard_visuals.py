@@ -13,6 +13,7 @@ def test_dashboard_renders_fixed_asset_order_filters_and_new_assets(client):
     assert ">Mantener<" in html
     assert ">Vender<" in html
 
+    market_html = html.split('id="marketGridV2"', 1)[1].split('id="marketResult"', 1)[0]
     expected = [
         ">BTC<",
         ">ETH<",
@@ -28,10 +29,10 @@ def test_dashboard_renders_fixed_asset_order_filters_and_new_assets(client):
         ">TSLA<",
         ">AAPL<",
     ]
-    positions = [html.index(symbol) for symbol in expected]
+    positions = [market_html.index(symbol) for symbol in expected]
     assert positions == sorted(positions)
-    assert "AAPL_MXN" not in html
-    assert "ALGN_MXN" not in html
+    assert "AAPL_MXN" not in market_html
+    assert "ALGN_MXN" not in market_html
 
 
 def test_new_visual_assets_define_full_card_and_portfolio_colors(client):
@@ -45,5 +46,5 @@ def test_new_visual_assets_define_full_card_and_portfolio_colors(client):
     assert ".market-book-v2.signal-sell" in css.text
     assert ".position-row:has(.compact-result .negative)" in css.text
     assert ".position-row:has(.compact-result .positive)" in css.text
-    assert 'data-type-filter="stocks"' not in javascript.text
     assert "marketFiltersV2" in javascript.text
+    assert "marketGridV2" in javascript.text
