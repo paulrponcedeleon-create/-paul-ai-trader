@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Rendimiento · {{ app_name }}</title>
   <link rel="stylesheet" href="/static/app.css?v=20260720-6">
-  <link rel="stylesheet" href="/static/markets.css?v=20260720-1">
+  <link rel="stylesheet" href="/static/markets.css?v=20260720-3">
 </head>
 <body>
   <main class="shell">
@@ -46,7 +46,7 @@
         <div class="section-title">
           <div>
             <p class="eyebrow">FILTROS</p>
-            <h2>Periodo y criptomonedas</h2>
+            <h2>Periodo y activos</h2>
           </div>
           <small id="performanceUpdated" class="muted">Esperando datos…</small>
         </div>
@@ -71,10 +71,10 @@
           </label>
 
           <fieldset class="crypto-filter">
-            <legend>Criptomonedas</legend>
+            <legend>Activos</legend>
             <div class="filter-actions">
-              <button type="button" class="text-button" id="selectAllBooks">Todas</button>
-              <button type="button" class="text-button" id="clearBooks">Ninguna</button>
+              <button type="button" class="text-button" id="selectAllBooks">Todos</button>
+              <button type="button" class="text-button" id="clearBooks">Ninguno</button>
             </div>
             <div class="book-checks">
               {% for book in allowed_books %}
@@ -129,13 +129,13 @@
 
       <section class="card">
         <div class="section-title">
-          <div><p class="eyebrow">POR CRIPTOMONEDA</p><h2>Comparación de resultados</h2></div>
+          <div><p class="eyebrow">POR ACTIVO</p><h2>Comparación de resultados</h2></div>
         </div>
         <div class="table-wrap">
           <table class="performance-table">
             <thead>
               <tr>
-                <th>Cripto</th><th>Ops.</th><th>Ganadas</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>Rendimiento</th>
+                <th>Activo</th><th>Ops.</th><th>Ganadas</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>Rendimiento</th>
               </tr>
             </thead>
             <tbody id="bookPerformance">
@@ -154,7 +154,7 @@
           <table class="performance-table">
             <thead>
               <tr>
-                <th>Fecha</th><th>Cripto</th><th>Acción</th><th>Invertido</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>%</th>
+                <th>Fecha</th><th>Activo</th><th>Acción</th><th>Invertido</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>%</th>
               </tr>
             </thead>
             <tbody id="performanceOperations">
@@ -169,7 +169,7 @@
       </footer>
     </div>
   </main>
-  <script src="/static/performance.js?v=20260720-1"></script>
-  <script src="/static/market-catalog.js?v=20260720-1"></script>
+  <script src="/static/performance.js?v=20260720-2"></script>
+  <script src="/static/market-catalog.js?v=20260720-3"></script>
 </body>
 </html>
