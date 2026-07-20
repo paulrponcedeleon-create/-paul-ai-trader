@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -133,7 +134,7 @@ def test_live_simulated_position_tracks_fees_and_closes_net_pnl(client, fake_bit
     unchanged_position = unchanged.json()["items"][0]
     assert unchanged_position["current_value_mxn"] == 98.45
     assert unchanged_position["unrealized_pnl_mxn"] == -1.55
-    assert unchanged_position["break_even_price"] == 101.57844368903491
+    assert unchanged_position["break_even_price"] == pytest.approx(101.57844368903491)
 
     fake_bitso.prices["btc_mxn"] = 110.0
     positions = client.get("/api/positions")
