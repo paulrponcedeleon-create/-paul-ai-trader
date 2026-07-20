@@ -63,6 +63,10 @@ class Settings(BaseSettings):
         if self.session_cookie_samesite == "none" and not self.resolved_session_cookie_secure:
             raise ValueError("SameSite=None requiere SESSION_COOKIE_SECURE=true.")
 
+        database_url = self.database_url.strip()
+        if not database_url:
+            raise ValueError("DATABASE_URL no puede estar vacío.")
+
         if self.is_production:
             insecure_session_secret = (
                 len(self.session_secret) < 32
@@ -82,6 +86,10 @@ class Settings(BaseSettings):
                 raise ValueError("APP_PASSWORD debe configurarse explícitamente en producción.")
             if not self.resolved_session_cookie_secure:
                 raise ValueError("Las cookies de sesión deben ser seguras en producción.")
+            if database_url.lower().startswith("sqlite"):
+                raise ValueError(
+                    "DATABASE_URL debe apuntar a PostgreSQL en producción; SQLite no es persistente en Render."
+                )
 
         return self
 
