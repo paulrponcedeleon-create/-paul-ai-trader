@@ -105,6 +105,7 @@
       if (!catalog.length) throw new Error("Bitso no devolvió mercados MXN disponibles");
       renderDashboard();
       renderPerformance();
+      if (dashboardBooks && typeof refreshMarket === "function") refreshMarket();
       if (performanceChecks && typeof loadPerformance === "function") loadPerformance();
     } catch(error) {
       const status = document.querySelector("#marketCatalogStatus") || document.querySelector("#performanceUpdated");
