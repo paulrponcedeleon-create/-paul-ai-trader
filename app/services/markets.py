@@ -82,6 +82,8 @@ def build_market_catalog(
         return items
 
     minimum_fee = min(item["taker_fee_rate"] for item in items)
+    maximum_fee = max(item["taker_fee_rate"] for item in items)
+    fees_differ = (maximum_fee - minimum_fee) > 1e-12
     volatile_books = {item["book"] for item in items[: min(5, len(items))]}
     for item in items:
         tags: list[str] = []
@@ -89,7 +91,7 @@ def build_market_catalog(
             tags.append("Principal")
         if item["book"] in volatile_books or item["range_24_pct"] >= 5:
             tags.append("Alta volatilidad")
-        if abs(item["taker_fee_rate"] - minimum_fee) < 1e-12:
+        if fees_differ and abs(item["taker_fee_rate"] - minimum_fee) < 1e-12:
             tags.append("Comisión menor")
         item["tags"] = tags
 
