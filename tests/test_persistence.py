@@ -122,7 +122,8 @@ def test_live_simulated_position_tracks_and_closes_pnl(client, fake_bitso):
 
     assert opened.status_code == 200
     opened_data = opened.json()
-    assert opened_data["status"] == "open"
+    assert opened_data["status"] == "simulated"
+    assert opened_data["position_status"] == "open"
     assert opened_data["reference_price"] == 100.0
     assert opened_data["asset_quantity"] == 1.0
 
