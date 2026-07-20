@@ -7,8 +7,10 @@ import httpx
 
 from app.config import Settings, settings
 
+
 class BitsoError(RuntimeError):
     pass
+
 
 class BitsoClient:
     def __init__(self, client_settings: Settings | None = None) -> None:
@@ -44,7 +46,7 @@ class BitsoClient:
     ) -> dict[str, Any]:
         endpoint = endpoint.lstrip("/")
         url = f"{self.base_url}/{endpoint}"
-        headers: dict[str, str] = {"Accept": "application/json"}
+        headers: dict[str, str] = {"Accept": "application/json", "Cache-Control": "no-cache"}
         if private:
             headers["Authorization"] = self._auth_header(method, endpoint, payload)
             headers["Content-Type"] = "application/json"
@@ -64,13 +66,16 @@ class BitsoClient:
         return data
 
     async def ticker(self, book: str) -> dict[str, Any]:
-        return await self._request("GET", "ticker", params={"book": book})
+        return await self._request("GET", "ticker", params={"book": book, "_": time.time_ns()})
 
     async def available_books(self) -> dict[str, Any]:
         return await self._request("GET", "available_books")
 
     async def balance(self) -> dict[str, Any]:
         return await self._request("GET", "balance", private=True)
+
+    async def fees(self) -> dict[str, Any]:
+        return await self._request("GET", "fees", private=True)
 
     async def open_orders(self, book: str | None = None) -> dict[str, Any]:
         params = {"book": book} if book else None
