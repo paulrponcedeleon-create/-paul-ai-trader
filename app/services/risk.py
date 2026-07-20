@@ -19,7 +19,7 @@ def validate_order(
 ) -> RiskDecision:
     current_settings = risk_settings or settings
     book = book.lower()
-    if book not in current_settings.allowed_books_set:
+    if book not in current_settings.enabled_books_set:
         return RiskDecision(False, f"Mercado no autorizado: {book}")
     if side not in {"buy", "sell"}:
         return RiskDecision(False, "Tipo de orden inválido.")
