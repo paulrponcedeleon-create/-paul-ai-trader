@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -37,6 +37,80 @@ def test_sql_repository_persists_simulated_orders(tmp_path):
     assert items[0]["book"] == "btc_mxn"
 
 
+def test_sql_repository_lists_stable_pages_and_total(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'pages.db'}", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, expire_on_commit=False)
+    start = datetime(2026, 7, 20, tzinfo=timezone.utc)
+
+    with Session() as session:
+        repository = SqlSimulatedOrderRepository(session)
+        for index in range(5):
+            repository.add(
+                {
+                    "id": f"sim-{index}",
+                    "created_at": start + timedelta(minutes=index),
+                    "status": "simulated",
+                    "book": "btc_mxn",
+                    "side": "buy",
+                    "amount_mxn": 10 + index,
+                    "risk_check": "Orden dentro de límites.",
+                }
+            )
+        session.commit()
+
+    with Session() as session:
+        repository = SqlSimulatedOrderRepository(session)
+        first_page = repository.list(limit=2, offset=0)
+        second_page = repository.list(limit=2, offset=2)
+        total = repository.count()
+
+    assert [item["id"] for item in first_page] == ["sim-4", "sim-3"]
+    assert [item["id"] for item in second_page] == ["sim-2", "sim-1"]
+    assert total == 5
+
+
+def test_api_simulation_history_is_paginated(client: TestClient):
+    client.post("/api/login", json={"password": "test-password"})
+
+    for index in range(23):
+        order = client.post(
+            "/api/orders",
+            json={
+                "book": "btc_mxn",
+                "side": "buy",
+                "amount_mxn": 10 + index,
+            },
+        )
+        assert order.status_code == 200
+
+    first = client.get("/api/simulations?limit=10&offset=0")
+    second = client.get("/api/simulations?limit=10&offset=10")
+    third = client.get("/api/simulations?limit=10&offset=20")
+
+    assert first.status_code == 200
+    assert first.json()["total"] == 23
+    assert len(first.json()["items"]) == 10
+    assert first.json()["has_more"] is True
+    assert first.json()["next_offset"] == 10
+
+    assert len(second.json()["items"]) == 10
+    assert second.json()["has_more"] is True
+    assert second.json()["next_offset"] == 20
+
+    assert len(third.json()["items"]) == 3
+    assert third.json()["has_more"] is False
+    assert third.json()["next_offset"] is None
+
+    all_ids = [
+        item["id"]
+        for page in (first.json(), second.json(), third.json())
+        for item in page["items"]
+    ]
+    assert len(all_ids) == len(set(all_ids)) == 23
+    assert client.get("/api/simulations?limit=101").status_code == 422
+
+
 def test_api_simulation_survives_application_restart(test_settings, fake_bitso, tmp_path):
     db_url = f"sqlite:///{tmp_path / 'api.db'}"
     test_settings.database_url = db_url
@@ -62,4 +136,6 @@ def test_api_simulation_survives_application_restart(test_settings, fake_bitso, 
 
     assert history.status_code == 200
     assert history.json()["items"][0]["id"] == created_id
+    assert history.json()["total"] == 1
+    assert history.json()["has_more"] is False
     assert fake_bitso.place_order_calls == 0
