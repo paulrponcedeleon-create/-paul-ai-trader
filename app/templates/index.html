@@ -13,9 +13,14 @@
         <p class="eyebrow">PAUL AI TRADER</p>
         <h1>Panel de inversión</h1>
       </div>
-      <span class="mode {{ 'live' if live_trading else 'simulation' }}">
-        {{ 'LIVE' if live_trading else 'SIMULACIÓN' }}
-      </span>
+      <div class="section-title">
+        <span class="mode {{ 'live' if live_trading else 'simulation' }}">
+          {{ 'LIVE' if live_trading else 'SIMULACIÓN' }}
+        </span>
+        {% if authenticated %}
+        <button type="button" class="secondary" id="logoutBtn">Cerrar sesión</button>
+        {% endif %}
+      </div>
     </header>
 
     <section id="loginCard" class="card {% if authenticated %}hidden{% endif %}">
