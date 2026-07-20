@@ -9,8 +9,19 @@ from tests.conftest import FakeBitsoClient, FakeStockQuoteClient
 
 
 EXPECTED_SYMBOLS = [
-    "BTC", "ETH", "SOL", "ATOM", "MXN", "USD", "USDT",
-    "PAXG", "XRP", "ALGN", "PSTG", "TSLA", "AAPL",
+    "BTC",
+    "ETH",
+    "SOL",
+    "ATOM",
+    "MXN",
+    "USD",
+    "USDT",
+    "PAXG",
+    "XRP",
+    "ALGN",
+    "PSTG",
+    "TSLA",
+    "AAPL",
 ]
 
 
@@ -29,6 +40,8 @@ def test_curated_market_catalog_has_visual_signals_and_exact_assets(client):
     assert actions["BTC"] == "buy"
     assert actions["SOL"] == "sell"
     assert actions["ETH"] == "hold"
+    assert actions["ATOM"] == "hold"
+    assert actions["PAXG"] == "hold"
     assert actions["MXN"] == "hold"
     assert actions["ALGN"] == "buy"
     assert actions["TSLA"] == "sell"
@@ -40,6 +53,16 @@ def test_curated_market_catalog_has_visual_signals_and_exact_assets(client):
     assert by_symbol["PSTG"]["name"] == "Everpure, Inc."
     assert by_symbol["MXN"]["tradeable"] is False
 
+    assert by_symbol["ATOM"]["available"] is True
+    assert by_symbol["ATOM"]["tradeable"] is True
+    assert by_symbol["ATOM"]["source"] == "bitso_rfq"
+    assert by_symbol["ATOM"]["fee_included_in_quote"] is True
+    assert by_symbol["ATOM"]["route_label"] == "Conversión Bitso App · MXN → ATOM"
+
+    assert by_symbol["PAXG"]["available"] is True
+    assert by_symbol["PAXG"]["source"] == "bitso_rfq"
+    assert by_symbol["PAXG"]["route_label"] == "Conversión Bitso App · MXN → PAXG"
+
 
 def test_curated_catalog_uses_short_server_cache(client, fake_bitso):
     client.post("/api/login", json={"password": "test-password"})
@@ -49,6 +72,8 @@ def test_curated_catalog_uses_short_server_cache(client, fake_bitso):
         fake_bitso.available_books_calls,
         fake_bitso.fee_calls,
         fake_bitso.ticker_calls,
+        fake_bitso.rfq_pairs_calls,
+        fake_bitso.rfq_quote_calls,
     )
     second = client.get("/api/markets")
 
@@ -57,7 +82,37 @@ def test_curated_catalog_uses_short_server_cache(client, fake_bitso):
         fake_bitso.available_books_calls,
         fake_bitso.fee_calls,
         fake_bitso.ticker_calls,
+        fake_bitso.rfq_pairs_calls,
+        fake_bitso.rfq_quote_calls,
     )
+
+
+def test_atom_simulation_uses_bitso_app_buy_and_sell_quotes(client):
+    client.post("/api/login", json={"password": "test-password"})
+
+    opened = client.post(
+        "/api/orders",
+        json={"book": "atom_mxn", "side": "buy", "amount_mxn": 100},
+    )
+    positions = client.get("/api/positions")
+
+    assert opened.status_code == 200
+    opened_data = opened.json()
+    assert opened_data["symbol"] == "ATOM"
+    assert opened_data["reference_price"] == 90.0
+    assert opened_data["entry_fee_mxn"] == 0.0
+    assert opened_data["fee_included_in_quote"] is True
+    assert opened_data["route_label"] == "Conversión Bitso App · MXN → ATOM"
+
+    assert positions.status_code == 200
+    item = positions.json()["items"][0]
+    assert item["symbol"] == "ATOM"
+    assert item["current_price"] == 89.1
+    assert item["current_value_mxn"] == 99.0
+    assert item["unrealized_pnl_mxn"] == -1.0
+    assert item["total_estimated_fees_mxn"] == 0.0
+    assert item["fee_included_in_quote"] is True
+    assert item["route_label"] == "Conversión Bitso App · ATOM → MXN"
 
 
 def test_stock_simulation_uses_mxn_reference_and_zero_trading_fee(client):
