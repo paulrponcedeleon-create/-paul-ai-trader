@@ -108,7 +108,7 @@ def test_performance_filters_multiple_books_and_calculates_net_results(client):
 def test_performance_rejects_invalid_crypto_and_custom_range(client):
     client.post("/api/login", json={"password": "test-password"})
 
-    invalid_book = client.get("/api/performance?books=doge_mxn")
+    invalid_book = client.get("/api/performance?books=not_a_real_market")
     invalid_dates = client.get(
         "/api/performance?period=custom&start=2026-07-20&end=2026-07-01"
     )
