@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>{{ app_name }}</title>
   <link rel="stylesheet" href="/static/app.css?v=20260720-6">
-  <link rel="stylesheet" href="/static/markets.css?v=20260720-1">
+  <link rel="stylesheet" href="/static/markets.css?v=20260720-3">
 </head>
 <body>
   <main class="shell">
@@ -76,7 +76,7 @@
 
       <section class="card">
         <div class="section-title">
-          <div><p class="eyebrow">MERCADO</p><h2>Análisis actual</h2></div>
+          <div><p class="eyebrow">MERCADO</p><h2>Señales visuales</h2></div>
           <div class="market-actions">
             <small id="statusText" class="muted">Listo</small>
             <button class="secondary" id="refreshBtn">Actualizar</button>
@@ -88,7 +88,7 @@
           {% endfor %}
         </div>
         <div id="marketResult" class="market-result">
-          <p>Selecciona una moneda para consultar Bitso.</p>
+          <p>Selecciona un activo para consultar su señal.</p>
         </div>
       </section>
 
@@ -96,25 +96,25 @@
         <p class="eyebrow">ORDEN CONTROLADA</p>
         <h2>Abrir posición simulada</h2>
         <form id="orderForm" class="order-form">
-          <label>Mercado<select id="orderBook">
+          <label>Activo<select id="orderBook">
             {% for book in allowed_books %}<option value="{{ book }}">{{ book|upper }}</option>{% endfor %}
           </select></label>
           <label>Acción<select id="orderSide"><option value="buy">Comprar</option><option value="sell">Vender (corta)</option></select></label>
           <label>Monto MXN<input id="orderAmount" type="number" min="1" max="{{ max_order }}" value="100"></label>
           <button type="submit">Abrir simulación</button>
         </form>
-        <p class="muted">Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN. Las órdenes de mercado se calculan como taker.</p>
+        <p class="muted">Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN. Cripto usa la ruta de Bitso disponible y sus comisiones; acciones usan 0% de comisión de compraventa y una referencia externa de precio. El spread no está garantizado.</p>
         <p id="orderMessage"></p>
       </section>
 
       <section class="card">
         <div class="section-title">
-          <div><p class="eyebrow">HISTORIAL</p><h2>Operaciones simuladas</h2></div>
+          <div><p class="eyebrow">HISTORIAL</p><h2>Últimas 5 operaciones</h2></div>
         </div>
         <div id="history"><p>Sin operaciones todavía.</p></div>
         <p id="historyMeta" class="history-meta"></p>
         <div class="history-actions">
-          <button type="button" class="secondary hidden" id="loadMoreBtn">Cargar más</button>
+          <button type="button" class="secondary hidden" id="loadMoreBtn">Cargar 5 más</button>
         </div>
       </section>
 
@@ -139,11 +139,11 @@
       </dialog>
 
       <footer>
-        <p>Las señales no garantizan rendimientos. El modo real permanece bloqueado por defecto.</p>
+        <p>Las señales son educativas y no garantizan rendimientos. El modo real permanece bloqueado por defecto.</p>
       </footer>
     </div>
   </main>
-  <script src="/static/app.js?v=20260720-6"></script>
-  <script src="/static/market-catalog.js?v=20260720-1"></script>
+  <script src="/static/app.js?v=20260720-7"></script>
+  <script src="/static/market-catalog.js?v=20260720-3"></script>
 </body>
 </html>
