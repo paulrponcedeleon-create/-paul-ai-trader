@@ -1,6 +1,9 @@
 const qs = s => document.querySelector(s);
+const HISTORY_PAGE_SIZE = 20;
 let selectedBook = document.querySelector(".book.active")?.dataset.book || "btc_mxn";
 let marketRequestId = 0;
+let historyOffset = 0;
+let historyLoading = false;
 
 async function api(url, options={}) {
   const response = await fetch(url, {
@@ -80,22 +83,54 @@ qs("#orderForm")?.addEventListener("submit", async e => {
       })
     });
     qs("#orderMessage").textContent = `Operación ${data.status}: ${data.side} $${data.amount_mxn} MXN`;
-    loadHistory();
+    await loadHistory({reset:true});
   } catch(err) { qs("#orderMessage").textContent = err.message; }
 });
 
-async function loadHistory() {
-  try {
-    const data = await api("/api/simulations");
-    qs("#history").innerHTML = data.items.length ? data.items.map(x => `
-      <div class="history-item">
-        <div><strong>${x.book.toUpperCase()}</strong><br><small>${x.side.toUpperCase()}</small></div>
-        <div><strong>$${x.amount_mxn} MXN</strong><br><small>${new Date(x.created_at).toLocaleString("es-MX")}</small></div>
-      </div>`).join("") : "<p>Sin operaciones todavía.</p>";
-  } catch(err) { qs("#history").innerHTML = `<p class="error">${err.message}</p>`; }
+function renderHistoryItems(items) {
+  return items.map(x => `
+    <div class="history-item">
+      <div><strong>${x.book.toUpperCase()}</strong><br><small>${x.side.toUpperCase()}</small></div>
+      <div><strong>$${x.amount_mxn} MXN</strong><br><small>${new Date(x.created_at).toLocaleString("es-MX")}</small></div>
+    </div>`).join("");
 }
 
+async function loadHistory({reset=false}={}) {
+  if (historyLoading) return;
+
+  const offset = reset ? 0 : historyOffset;
+  const button = qs("#loadMoreBtn");
+  historyLoading = true;
+  button.disabled = true;
+  button.textContent = "Cargando...";
+
+  try {
+    const data = await api(`/api/simulations?limit=${HISTORY_PAGE_SIZE}&offset=${offset}`);
+    const markup = renderHistoryItems(data.items);
+
+    if (reset) {
+      qs("#history").innerHTML = markup || "<p>Sin operaciones todavía.</p>";
+    } else if (markup) {
+      qs("#history").insertAdjacentHTML("beforeend", markup);
+    }
+
+    const shown = offset + data.items.length;
+    historyOffset = data.next_offset ?? shown;
+    qs("#historyMeta").textContent = data.total ? `Mostrando ${shown} de ${data.total}` : "";
+    button.classList.toggle("hidden", !data.has_more);
+  } catch(err) {
+    if (reset) qs("#history").innerHTML = `<p class="error">${err.message}</p>`;
+    else qs("#historyMeta").textContent = err.message;
+  } finally {
+    historyLoading = false;
+    button.disabled = false;
+    button.textContent = "Cargar más";
+  }
+}
+
+qs("#loadMoreBtn")?.addEventListener("click", () => loadHistory());
+
 if (!qs("#appContent")?.classList.contains("hidden")) {
-  loadHistory();
+  loadHistory({reset:true});
   refreshMarket();
 }
