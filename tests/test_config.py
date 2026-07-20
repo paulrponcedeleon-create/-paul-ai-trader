@@ -68,3 +68,21 @@ def test_production_rejects_example_placeholders():
             app_password=EXAMPLE_APP_PASSWORD,
             session_secret=EXAMPLE_SESSION_SECRET,
         )
+
+
+def test_database_defaults_to_local_sqlite():
+    configured = Settings(_env_file=None)
+
+    assert configured.database_url == "sqlite:///./paul_ai_trader.db"
+
+
+def test_database_url_can_target_postgresql_for_production():
+    configured = Settings(
+        _env_file=None,
+        app_env="production",
+        app_password="production-password",
+        session_secret="production-session-secret-with-at-least-32-characters",
+        database_url="postgresql://user:password@example.com:5432/paul",
+    )
+
+    assert configured.database_url.startswith("postgresql://")

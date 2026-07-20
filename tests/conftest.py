@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
-from app.services import store
 
 
 class FakeBitsoClient:
@@ -55,10 +54,9 @@ def fake_bitso() -> FakeBitsoClient:
 def client(
     test_settings: Settings,
     fake_bitso: FakeBitsoClient,
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    monkeypatch.setattr(store, "DATA_FILE", tmp_path / "simulations.json")
+    test_settings.database_url = f"sqlite:///{tmp_path / 'simulations.db'}"
     application = create_app(test_settings, fake_bitso)
     with TestClient(application) as test_client:
         yield test_client

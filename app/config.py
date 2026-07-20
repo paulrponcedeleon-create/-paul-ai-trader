@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     bitso_api_key: str = ""
     bitso_api_secret: str = ""
 
+    database_url: str = "sqlite:///./paul_ai_trader.db"
+
     live_trading: bool = False
     max_order_mxn: float = 200.0
     max_daily_loss_mxn: float = 100.0
