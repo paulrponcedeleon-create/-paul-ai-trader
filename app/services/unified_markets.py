@@ -138,6 +138,7 @@ class UnifiedMarketService:
             raise UnifiedMarketError(f"Bitso no tiene una ruta disponible para {major.upper()} desde MXN.")
 
         rates, _ = await self._fees()
+
         def route_cost(legs: list[str]) -> float:
             retained = 1.0
             for leg in legs:
@@ -163,7 +164,7 @@ class UnifiedMarketService:
             volume += float(ticker.get("volume") or 0)
             retained *= 1.0 - rates.get(leg, self._fallback_fee(leg))
 
-        fee_rate = 1.0 - retained
+        fee_rate = round(1.0 - retained, 12)
         return {
             "book": asset.book,
             "symbol": asset.symbol,
@@ -174,7 +175,7 @@ class UnifiedMarketService:
             "low": low,
             "volume": volume,
             "effective_fee_rate": fee_rate,
-            "effective_fee_percent": fee_rate * 100,
+            "effective_fee_percent": round(fee_rate * 100, 6),
             "fee_source": fee_source,
             "route": legs,
             "source": "bitso",
