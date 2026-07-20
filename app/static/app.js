@@ -1,5 +1,5 @@
 const qs = selector => document.querySelector(selector);
-const HISTORY_PAGE_SIZE = 20;
+const HISTORY_PAGE_SIZE = 5;
 const POSITION_REFRESH_MS = 5000;
 
 let selectedBook = document.querySelector(".book.active")?.dataset.book || "btc_mxn";
@@ -62,6 +62,18 @@ function pnlClass(value) {
   return "neutral";
 }
 
+function assetSymbol(book, provided=null) {
+  if (provided) return provided;
+  if (typeof window.displayMarketSymbol === "function") return window.displayMarketSymbol(book);
+  return String(book || "").replace(/_mxn$|_cash$/i, "").toUpperCase();
+}
+
+function assetName(book, provided=null) {
+  if (provided) return provided;
+  if (typeof window.displayMarketName === "function") return window.displayMarketName(book);
+  return assetSymbol(book);
+}
+
 function setText(element, text, {pulse=false, className=null}={}) {
   if (!element) return;
   const changed = element.textContent !== text;
@@ -78,7 +90,8 @@ document.querySelectorAll(".book").forEach(btn => btn.addEventListener("click", 
   document.querySelectorAll(".book").forEach(x=>x.classList.remove("active"));
   btn.classList.add("active");
   selectedBook = btn.dataset.book;
-  qs("#orderBook").value = selectedBook;
+  const option = qs(`#orderBook option[value="${selectedBook}"]`);
+  if (option) qs("#orderBook").value = selectedBook;
   await refreshMarket();
 }));
 
@@ -109,18 +122,27 @@ qs("#logoutBtn")?.addEventListener("click", async () => {
 async function refreshMarket() {
   const requestId = ++marketRequestId;
   const requestedBook = selectedBook;
+  const symbol = assetSymbol(requestedBook);
   qs("#statusText").textContent = "Consultando...";
-  qs("#marketResult").innerHTML = `<p>Actualizando ${requestedBook.toUpperCase()}...</p>`;
+  qs("#marketResult").innerHTML = `<p>Actualizando ${symbol}...</p>`;
   try {
     const data = await api(`/api/market/${requestedBook}?ts=${Date.now()}`);
     if (requestId !== marketRequestId) return;
     const signal = data.signal;
+    const ticker = data.ticker || {};
+    const actionLabel = {buy:"COMPRAR", hold:"MANTENER", sell:"VENDER"}[signal.action] || signal.action.toUpperCase();
+    const fee = ticker.effective_fee_percent == null
+      ? "No disponible"
+      : `${Number(ticker.effective_fee_percent).toFixed(3)}%`;
+    const route = ticker.route?.length ? ticker.route.map(value => value.toUpperCase()).join(" → ") : "Sin conversión";
     qs("#marketResult").innerHTML = `
-      <div class="signal ${signal.action}">${signal.action.toUpperCase()}</div>
-      <p><strong>Precio:</strong> $${Number(signal.reference_price).toLocaleString("es-MX")}</p>
+      <div class="signal ${signal.action}">${actionLabel}</div>
+      <p><strong>${ticker.name || assetName(requestedBook)}:</strong> ${formatMoney(signal.reference_price)}</p>
       <p><strong>Confianza:</strong> ${signal.confidence}%</p>
+      <p><strong>Comisión estimada de entrada:</strong> ${fee}</p>
+      <p><strong>Ruta:</strong> ${route}</p>
       <p>${signal.reason}</p>`;
-    qs("#statusText").textContent = "Actualizado";
+    qs("#statusText").textContent = ticker.delayed ? "Referencia retrasada" : "Actualizado";
   } catch(error) {
     if (requestId !== marketRequestId) return;
     qs("#marketResult").innerHTML = `<p class="error">${error.message}</p>`;
@@ -168,20 +190,22 @@ function createPositionElement(position) {
 function updatePositionElement(article, position) {
   const pnl = Number(position.unrealized_pnl_mxn || 0);
   const sideLabel = position.side === "buy" ? "COMPRA" : "VENTA CORTA";
-  setText(article.querySelector('[data-field="book"]'), position.book.toUpperCase());
+  const symbol = assetSymbol(position.book, position.symbol);
+  const name = assetName(position.book, position.name);
+  setText(article.querySelector('[data-field="book"]'), `${symbol} · ${name}`);
   setText(article.querySelector('[data-field="meta"]'), `${sideLabel} · ${new Date(position.created_at).toLocaleString("es-MX")}`);
   setText(article.querySelector('[data-field="amount"]'), formatMoney(position.amount_mxn));
   setText(article.querySelector('[data-field="currentValue"]'), formatMoney(position.current_value_mxn), {pulse:true});
   setText(article.querySelector('[data-field="pnl"]'), signedMoney(pnl), {pulse:true, className:pnlClass(pnl)});
   setText(article.querySelector('[data-field="returnPct"]'), signedPercent(position.return_pct), {pulse:true, className:pnlClass(pnl)});
-  setText(article.querySelector('[data-field="entryPrice"]'), `$${formatPrice(position.entry_price)}`);
-  setText(article.querySelector('[data-field="currentPrice"]'), `$${formatPrice(position.current_price)}`, {pulse:true});
+  setText(article.querySelector('[data-field="entryPrice"]'), formatMoney(position.entry_price));
+  setText(article.querySelector('[data-field="currentPrice"]'), formatMoney(position.current_price), {pulse:true});
   setText(article.querySelector('[data-field="quantity"]'), Number(position.asset_quantity || 0).toLocaleString("es-MX", {maximumFractionDigits:12}));
   setText(article.querySelector('[data-field="entryFee"]'), formatMoney(position.entry_fee_mxn));
   setText(article.querySelector('[data-field="entryFeePct"]'), `${Number(position.entry_fee_percent).toFixed(3)}%`);
   setText(article.querySelector('[data-field="exitFee"]'), formatMoney(position.estimated_exit_fee_mxn), {pulse:true});
   setText(article.querySelector('[data-field="exitFeePct"]'), `${Number(position.exit_fee_percent).toFixed(3)}%`);
-  setText(article.querySelector('[data-field="breakEven"]'), `$${formatPrice(position.break_even_price)}`);
+  setText(article.querySelector('[data-field="breakEven"]'), formatMoney(position.break_even_price));
   setText(article.querySelector('[data-field="breakEvenPct"]'), signedPercent(position.break_even_change_pct));
 }
 
@@ -229,9 +253,14 @@ async function loadPositions() {
     const data = await api(`/api/positions?ts=${Date.now()}`);
     updatePortfolioSummary(data.summary);
     syncPositions(data.items);
-    const source = data.fee_source === "bitso_account"
-      ? "comisión de tu cuenta"
-      : "comisión pública de respaldo";
+    const sourceLabels = {
+      bitso_account: "comisiones de tu cuenta",
+      public_fallback: "comisiones públicas de respaldo",
+      bitso_stock_zero_fee: "acciones 0% de comisión",
+      mixed: "comisiones según cada activo",
+      none: "sin comisiones"
+    };
+    const source = sourceLabels[data.fee_source] || "comisiones según cada activo";
     qs("#positionsUpdated").textContent = `Actualizado ${new Date(data.updated_at).toLocaleTimeString("es-MX")} · ${source}`;
   } catch(error) {
     qs("#positionsUpdated").textContent = `Error: ${error.message}`;
@@ -262,12 +291,12 @@ function openCloseDialog(id) {
   if (!position) return;
   pendingCloseId = id;
   const pnl = Number(position.unrealized_pnl_mxn || 0);
-  setText(qs("#closeDialogBook"), `Cerrar ${position.book.toUpperCase()}`);
+  setText(qs("#closeDialogBook"), `Cerrar ${assetSymbol(position.book, position.symbol)}`);
   setText(qs("#closeDialogValue"), formatMoney(position.current_value_mxn));
   setText(qs("#closeDialogPnl"), signedMoney(pnl), {className:pnlClass(pnl)});
   setText(qs("#closeDialogReturn"), signedPercent(position.return_pct), {className:pnlClass(pnl)});
   setText(qs("#closeDialogFee"), formatMoney(position.estimated_exit_fee_mxn));
-  setText(qs("#closeDialogPrice"), `$${formatPrice(position.current_price)}`);
+  setText(qs("#closeDialogPrice"), formatMoney(position.current_price));
   qs("#closePositionDialog").showModal();
 }
 
@@ -320,7 +349,7 @@ qs("#orderForm")?.addEventListener("submit", async event => {
         open_orders:0
       })
     });
-    qs("#orderMessage").textContent = `Posición abierta en ${data.book.toUpperCase()} a $${formatPrice(data.reference_price)}. Comisión de entrada: ${formatMoney(data.entry_fee_mxn)}.`;
+    qs("#orderMessage").textContent = `Posición abierta en ${assetSymbol(data.book, data.symbol)} a ${formatMoney(data.reference_price)}. Comisión de entrada: ${formatMoney(data.entry_fee_mxn)}.`;
     await Promise.all([loadPositions(), loadHistory({reset:true})]);
   } catch(error) {
     qs("#orderMessage").textContent = error.message;
@@ -338,7 +367,7 @@ function renderHistoryItems(items) {
       : `<br><small class="${pnlClass(item.realized_pnl_mxn)}">Resultado neto: ${signedMoney(item.realized_pnl_mxn)}</small>`;
     return `
       <div class="history-item">
-        <div><strong>${item.book.toUpperCase()}</strong><br><small>${item.side.toUpperCase()} · ${statusLabel}</small></div>
+        <div><strong>${assetSymbol(item.book)}</strong><br><small>${item.side.toUpperCase()} · ${statusLabel}</small></div>
         <div><strong>${formatMoney(item.amount_mxn)}</strong><br><small>${new Date(item.created_at).toLocaleString("es-MX")}</small>${result}</div>
       </div>`;
   }).join("");
