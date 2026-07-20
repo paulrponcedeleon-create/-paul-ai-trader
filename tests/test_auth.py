@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
 
 from app.config import Settings
 from app.main import create_app
@@ -44,13 +45,18 @@ def test_local_cookie_is_http_only_lax_and_not_secure(client: TestClient):
     assert "secure" not in cookie
 
 
-def test_production_cookie_is_secure():
+def test_production_cookie_is_secure(monkeypatch):
     production_settings = Settings(
         _env_file=None,
         app_env="production",
         app_password="production-password",
         session_secret="production-session-secret-with-at-least-32-characters",
+        database_url="postgresql://user:password@example.com:5432/paul",
     )
+    test_engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}
+    )
+    monkeypatch.setattr("app.main.build_engine", lambda _: test_engine)
     application = create_app(production_settings)
 
     with TestClient(application, base_url="https://testserver") as production_client:

@@ -9,7 +9,10 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import Settings, settings
+from app.db.base import Base
+from app.db.session import build_engine, build_session_factory
 from app.models import LoginRequest, SimulatedOrderRequest
+from app.repositories.simulated_orders import SqlSimulatedOrderRepository
 from app.services.bitso import BitsoClient, BitsoError
 from app.services.risk import validate_order
 from app.services.store import add_simulation, list_simulations
@@ -34,6 +37,13 @@ def create_app(
 ) -> FastAPI:
     current_settings = app_settings or settings
     current_bitso = bitso_client or BitsoClient(current_settings)
+    engine = build_engine(current_settings)
+    session_factory = build_session_factory(engine)
+
+    # Tests use isolated temporary databases. Real environments must apply
+    # schema changes through Alembic so alembic_version remains authoritative.
+    if current_settings.app_env == "test":
+        Base.metadata.create_all(bind=engine)
 
     application = FastAPI(title=current_settings.app_name, version="1.0.0")
     application.add_middleware(
@@ -49,6 +59,12 @@ def create_app(
 
     application.state.settings = current_settings
     application.state.bitso = current_bitso
+    application.state.db_engine = engine
+    application.state.db_session_factory = session_factory
+
+    @application.on_event("shutdown")
+    def dispose_database_engine() -> None:
+        engine.dispose()
 
     @application.get("/health")
     async def health() -> dict:
@@ -133,7 +149,9 @@ def create_app(
     @application.get("/api/simulations")
     async def simulations(request: Request):
         require_auth(request)
-        return {"items": list_simulations()}
+        with session_factory() as db_session:
+            repository = SqlSimulatedOrderRepository(db_session)
+            return {"items": list_simulations(repository)}
 
     @application.post("/api/orders")
     async def order(body: SimulatedOrderRequest, request: Request):
@@ -152,14 +170,18 @@ def create_app(
         if not current_settings.live_trading:
             item = {
                 "id": secrets.token_hex(6),
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc),
                 "status": "simulated",
                 "book": body.book.lower(),
                 "side": body.side,
                 "amount_mxn": round(body.amount_mxn, 2),
                 "risk_check": decision.reason,
             }
-            return add_simulation(item)
+            with session_factory() as db_session:
+                repository = SqlSimulatedOrderRepository(db_session)
+                saved_item = add_simulation(item, repository)
+                db_session.commit()
+                return saved_item
 
         try:
             result = await current_bitso.place_market_order(
