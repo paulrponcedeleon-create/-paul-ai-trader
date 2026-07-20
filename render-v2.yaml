@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: paul-ai-trader-v2-preview
+    runtime: python
+    plan: free
+    region: oregon
+    branch: v2-dashboard
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_NAME
+        value: Paul AI Trader v2 Preview
+      - key: APP_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: SESSION_COOKIE_SAMESITE
+        value: lax
+      - key: DATABASE_URL
+        fromDatabase:
+          name: paul-ai-trader-v2-db
+          property: connectionString
+      - key: BITSO_BASE_URL
+        value: https://api.bitso.com/api/v3
+      - key: BITSO_API_KEY
+        sync: false
+      - key: BITSO_API_SECRET
+        sync: false
+      - key: LIVE_TRADING
+        value: "false"
+      - key: MAX_ORDER_MXN
+        value: "200"
+      - key: MAX_DAILY_LOSS_MXN
+        value: "100"
+      - key: MAX_OPEN_ORDERS
+        value: "3"
+      - key: ALLOWED_BOOKS
+        value: btc_mxn,eth_mxn,xrp_mxn,sol_mxn
+
+databases:
+  - name: paul-ai-trader-v2-db
+    plan: free
+    region: oregon
+    databaseName: paul_ai_trader_v2
+    ipAllowList: []
