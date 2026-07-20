@@ -1,0 +1,82 @@
+.market-catalog-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 8px;
+}
+
+.market-catalog-toolbar label {
+  min-width: 210px;
+}
+
+.market-catalog-toolbar small {
+  padding-bottom: 10px;
+  text-align: right;
+}
+
+.books {
+  align-items: stretch;
+}
+
+.market-book {
+  min-width: 170px;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 11px 12px;
+}
+
+.market-book small {
+  font-size: 10px;
+  line-height: 1.35;
+  color: inherit;
+  opacity: .78;
+}
+
+.market-symbol {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.market-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 18px;
+}
+
+.market-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 6px;
+  background: rgba(152, 162, 179, .18);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.market-book.active .market-tag {
+  background: rgba(255, 255, 255, .18);
+}
+
+@media (max-width: 600px) {
+  .market-catalog-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .market-catalog-toolbar label {
+    min-width: 0;
+  }
+
+  .market-catalog-toolbar small {
+    padding-bottom: 0;
+    text-align: left;
+  }
+
+  .market-book {
+    min-width: 155px;
+  }
+}
