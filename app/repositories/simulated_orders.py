@@ -33,6 +33,30 @@ class SqlSimulatedOrderRepository:
         ).all()
         return [row.to_dict() for row in rows]
 
+    def list_closed(
+        self,
+        *,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
+        books: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        statement = select(SimulatedOrder).where(
+            SimulatedOrder.status == "closed",
+            SimulatedOrder.closed_at.is_not(None),
+            SimulatedOrder.realized_pnl_mxn.is_not(None),
+        )
+        if start_at is not None:
+            statement = statement.where(SimulatedOrder.closed_at >= start_at)
+        if end_at is not None:
+            statement = statement.where(SimulatedOrder.closed_at < end_at)
+        if books:
+            statement = statement.where(SimulatedOrder.book.in_(sorted(books)))
+
+        rows = self.session.scalars(
+            statement.order_by(SimulatedOrder.closed_at.asc(), SimulatedOrder.id.asc())
+        ).all()
+        return [row.to_dict() for row in rows]
+
     def get_open(self, simulation_id: str) -> dict[str, Any] | None:
         row = self.session.get(SimulatedOrder, simulation_id)
         if row is None or row.status != "open" or row.reference_price is None:
