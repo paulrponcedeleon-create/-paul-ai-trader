@@ -5,91 +5,99 @@
   if (!dashboardBooks && !performanceChecks) return;
 
   let catalog = [];
+  const actionLabels = {buy: "COMPRAR", hold: "MANTENER", sell: "VENDER"};
 
-  function sortedCatalog(mode) {
-    const items = [...catalog];
-    if (mode === "fee") {
-      return items.sort((a, b) =>
-        a.taker_fee_rate - b.taker_fee_rate ||
-        b.range_24_pct - a.range_24_pct ||
-        a.book.localeCompare(b.book)
-      );
-    }
-    if (mode === "primary") {
-      return items.sort((a, b) =>
-        Number(b.is_primary) - Number(a.is_primary) ||
-        b.range_24_pct - a.range_24_pct ||
-        a.book.localeCompare(b.book)
-      );
-    }
-    return items.sort((a, b) =>
-      b.range_24_pct - a.range_24_pct ||
-      a.taker_fee_rate - b.taker_fee_rate ||
-      a.book.localeCompare(b.book)
-    );
+  function money(value) {
+    if (value === null || value === undefined) return "Sin precio";
+    return Number(value).toLocaleString("es-MX", {
+      style: "currency",
+      currency: "MXN",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
   }
 
-  function tagMarkup(tags) {
-    return (tags || []).map(tag => `<span class="market-tag">${tag}</span>`).join("");
+  function feeLabel(item) {
+    if (item.effective_fee_percent === null || item.effective_fee_percent === undefined) {
+      return item.asset_type === "cash" ? "Sin comisión" : "Comisión no disponible";
+    }
+    if (Number(item.effective_fee_percent) === 0) return "Comisión 0%";
+    return `Comisión estimada ${Number(item.effective_fee_percent).toFixed(3)}%`;
   }
 
-  function renderDashboard(mode = "volatility") {
+  function routeLabel(item) {
+    if (!item.route?.length) return item.asset_type === "cash" ? "Efectivo" : "Ruta no disponible";
+    return item.route.map(value => value.toUpperCase()).join(" → ");
+  }
+
+  function renderDashboard() {
     if (!dashboardBooks || !orderBook || !catalog.length) return;
-    const items = sortedCatalog(mode);
-    const current = typeof selectedBook !== "undefined" ? selectedBook : items[0].book;
-    const selected = items.some(item => item.book === current) ? current : items[0].book;
+    const firstAvailable = catalog.find(item => item.available) || catalog[0];
+    const current = typeof selectedBook !== "undefined" ? selectedBook : firstAvailable.book;
+    const selected = catalog.some(item => item.book === current) ? current : firstAvailable.book;
+
+    window.marketCatalogMap = new Map(catalog.map(item => [item.book, item]));
+    window.displayMarketSymbol = book => window.marketCatalogMap.get(book)?.symbol || book.toUpperCase();
+    window.displayMarketName = book => window.marketCatalogMap.get(book)?.name || book.toUpperCase();
 
     dashboardBooks.id = "marketBooks";
-    dashboardBooks.innerHTML = items.map(item => `
-      <button type="button" class="book market-book ${item.book === selected ? "active" : ""}" data-book="${item.book}">
-        <span class="market-symbol">${item.symbol}</span>
-        <small>Rango 24h ${Number(item.range_24_pct).toFixed(2)}% · Taker ${Number(item.taker_fee_percent).toFixed(3)}%</small>
-        <span class="market-tags">${tagMarkup(item.tags)}</span>
-      </button>`).join("");
+    dashboardBooks.classList.add("curated-watchlist");
+    dashboardBooks.innerHTML = catalog.map(item => {
+      const action = item.signal?.action || "hold";
+      const actionLabel = actionLabels[action] || action.toUpperCase();
+      const state = item.available ? "" : " market-unavailable";
+      return `
+        <button type="button" class="book market-book signal-${action}${state} ${item.book === selected ? "active" : ""}" data-book="${item.book}">
+          <span class="market-card-head">
+            <span><strong class="market-symbol">${item.symbol}</strong><small>${item.name}</small></span>
+            <strong class="market-action">${actionLabel}</strong>
+          </span>
+          <span class="market-price">${money(item.last)}</span>
+          <small>${feeLabel(item)}</small>
+          <small class="market-route">${routeLabel(item)}</small>
+        </button>`;
+    }).join("");
 
-    orderBook.innerHTML = items.map(item =>
-      `<option value="${item.book}" ${item.book === selected ? "selected" : ""}>${item.symbol} · rango ${Number(item.range_24_pct).toFixed(2)}% · comisión ${Number(item.taker_fee_percent).toFixed(3)}%</option>`
+    const tradeable = catalog.filter(item => item.available && item.tradeable);
+    const selectedTradeable = tradeable.some(item => item.book === selected)
+      ? selected
+      : tradeable[0]?.book;
+    orderBook.innerHTML = tradeable.map(item =>
+      `<option value="${item.book}" ${item.book === selectedTradeable ? "selected" : ""}>${item.symbol} · ${item.name} · ${feeLabel(item)}</option>`
     ).join("");
 
     if (typeof selectedBook !== "undefined") selectedBook = selected;
 
-    let toolbar = document.querySelector("#marketCatalogToolbar");
-    if (!toolbar) {
-      toolbar = document.createElement("div");
-      toolbar.id = "marketCatalogToolbar";
-      toolbar.className = "market-catalog-toolbar";
-      toolbar.innerHTML = `
-        <label>Ordenar mercados
-          <select id="marketSort">
-            <option value="volatility">Más volátiles</option>
-            <option value="fee">Menor comisión</option>
-            <option value="primary">Principales</option>
-          </select>
-        </label>
-        <small id="marketCatalogStatus"></small>`;
-      dashboardBooks.before(toolbar);
-      toolbar.querySelector("#marketSort").addEventListener("change", event => renderDashboard(event.target.value));
+    let status = document.querySelector("#marketCatalogStatus");
+    if (!status) {
+      status = document.createElement("p");
+      status.id = "marketCatalogStatus";
+      status.className = "market-catalog-status";
+      dashboardBooks.before(status);
     }
-    toolbar.querySelector("#marketSort").value = mode;
-    toolbar.querySelector("#marketCatalogStatus").textContent = `${items.length} mercados reales de Bitso`;
+    const availableCount = catalog.filter(item => item.available).length;
+    status.textContent = `${availableCount} de ${catalog.length} activos con precio disponible · verde comprar · azul mantener · rojo vender`;
   }
 
   function renderPerformance() {
     if (!performanceChecks || !catalog.length) return;
-    performanceChecks.innerHTML = sortedCatalog("volatility").map(item => `
-      <label class="book-check">
-        <input type="checkbox" name="performanceBook" value="${item.book}" checked>
-        <span>${item.symbol}</span>
-      </label>`).join("");
+    performanceChecks.innerHTML = catalog
+      .filter(item => item.tradeable)
+      .map(item => `
+        <label class="book-check">
+          <input type="checkbox" name="performanceBook" value="${item.book}" checked>
+          <span>${item.symbol}</span>
+        </label>`).join("");
   }
 
   dashboardBooks?.addEventListener("click", event => {
     const button = event.target.closest("[data-book]");
     if (!button) return;
-    dashboardBooks.querySelectorAll(".book").forEach(item => item.classList.remove("active"));
+    const item = window.marketCatalogMap?.get(button.dataset.book);
+    dashboardBooks.querySelectorAll(".book").forEach(element => element.classList.remove("active"));
     button.classList.add("active");
     if (typeof selectedBook !== "undefined") selectedBook = button.dataset.book;
-    if (orderBook) orderBook.value = button.dataset.book;
+    if (orderBook && item?.tradeable && item?.available) orderBook.value = button.dataset.book;
     if (typeof refreshMarket === "function") refreshMarket();
   });
 
@@ -100,16 +108,16 @@
         headers: {"Cache-Control": "no-cache", "Pragma": "no-cache"}
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "No se pudo cargar el catálogo");
+      if (!response.ok) throw new Error(data.detail || "No se pudo cargar la lista de activos");
       catalog = data.items || [];
-      if (!catalog.length) throw new Error("Bitso no devolvió mercados MXN disponibles");
+      if (!catalog.length) throw new Error("No se recibieron activos");
       renderDashboard();
       renderPerformance();
       if (dashboardBooks && typeof refreshMarket === "function") refreshMarket();
       if (performanceChecks && typeof loadPerformance === "function") loadPerformance();
     } catch(error) {
       const status = document.querySelector("#marketCatalogStatus") || document.querySelector("#performanceUpdated");
-      if (status) status.textContent = `Catálogo: ${error.message}`;
+      if (status) status.textContent = `Activos: ${error.message}`;
     }
   }
 
