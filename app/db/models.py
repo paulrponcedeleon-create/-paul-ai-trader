@@ -19,6 +19,10 @@ class SimulatedOrder(Base):
     amount_mxn: Mapped[float] = mapped_column(Float, nullable=False)
     reference_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     close_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    entry_fee_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    entry_fee_mxn: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_fee_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_fee_mxn: Mapped[float | None] = mapped_column(Float, nullable=True)
     realized_pnl_mxn: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="simulated", index=True
@@ -32,7 +36,9 @@ class SimulatedOrder(Base):
     def to_dict(self) -> dict[str, object]:
         asset_quantity = None
         if self.reference_price and self.reference_price > 0:
-            asset_quantity = round(self.amount_mxn / self.reference_price, 12)
+            gross_quantity = self.amount_mxn / self.reference_price
+            entry_rate = self.entry_fee_rate or 0.0
+            asset_quantity = round(gross_quantity * (1 - entry_rate), 12)
 
         return {
             "id": self.id,
@@ -45,6 +51,10 @@ class SimulatedOrder(Base):
             "reference_price": self.reference_price,
             "asset_quantity": asset_quantity,
             "close_price": self.close_price,
+            "entry_fee_rate": self.entry_fee_rate,
+            "entry_fee_mxn": round(self.entry_fee_mxn, 2) if self.entry_fee_mxn is not None else None,
+            "exit_fee_rate": self.exit_fee_rate,
+            "exit_fee_mxn": round(self.exit_fee_mxn, 2) if self.exit_fee_mxn is not None else None,
             "realized_pnl_mxn": (
                 round(self.realized_pnl_mxn, 2)
                 if self.realized_pnl_mxn is not None
