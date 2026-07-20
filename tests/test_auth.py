@@ -1,0 +1,80 @@
+from fastapi.testclient import TestClient
+
+from app.config import Settings
+from app.main import create_app
+
+
+def test_protected_endpoint_rejects_anonymous_client(client: TestClient):
+    response = client.get("/api/config")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Inicia sesión."}
+
+
+def test_login_preserves_current_api_behavior(client: TestClient):
+    login = client.post("/api/login", json={"password": "test-password"})
+
+    assert login.status_code == 200
+    assert login.json() == {"ok": True}
+    assert client.get("/api/config").status_code == 200
+
+
+def test_wrong_password_is_rejected(client: TestClient):
+    response = client.post("/api/login", json={"password": "wrong-password"})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Contraseña incorrecta."}
+
+
+def test_logout_invalidates_session(client: TestClient):
+    client.post("/api/login", json={"password": "test-password"})
+
+    logout = client.post("/api/logout")
+
+    assert logout.status_code == 200
+    assert client.get("/api/config").status_code == 401
+
+
+def test_local_cookie_is_http_only_lax_and_not_secure(client: TestClient):
+    response = client.post("/api/login", json={"password": "test-password"})
+    cookie = response.headers["set-cookie"].lower()
+
+    assert "httponly" in cookie
+    assert "samesite=lax" in cookie
+    assert "secure" not in cookie
+
+
+def test_production_cookie_is_secure():
+    production_settings = Settings(
+        _env_file=None,
+        app_env="production",
+        app_password="production-password",
+        session_secret="production-session-secret-with-at-least-32-characters",
+    )
+    application = create_app(production_settings)
+
+    with TestClient(application, base_url="https://testserver") as production_client:
+        response = production_client.post(
+            "/api/login", json={"password": "production-password"}
+        )
+
+    cookie = response.headers["set-cookie"].lower()
+    assert "secure" in cookie
+    assert "httponly" in cookie
+
+
+def test_tampered_session_cookie_is_rejected(test_settings: Settings):
+    application = create_app(test_settings)
+    with TestClient(application) as valid_client:
+        valid_client.post("/api/login", json={"password": "test-password"})
+        signed_cookie = valid_client.cookies.get(test_settings.session_cookie_name)
+
+    assert signed_cookie is not None
+    replacement = "a" if signed_cookie[-1] != "a" else "b"
+    tampered_cookie = f"{signed_cookie[:-1]}{replacement}"
+
+    with TestClient(application) as tampered_client:
+        tampered_client.cookies.set(test_settings.session_cookie_name, tampered_cookie)
+        response = tampered_client.get("/api/config")
+
+    assert response.status_code == 401

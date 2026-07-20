@@ -8,10 +8,22 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: LIVE_TRADING
-        value: "false"
+      - key: APP_ENV
+        value: "production"
+      - key: APP_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
       - key: BITSO_BASE_URL
         value: "https://api.bitso.com/api/v3"
+      - key: BITSO_API_KEY
+        sync: false
+      - key: BITSO_API_SECRET
+        sync: false
+      - key: LIVE_TRADING
+        value: "false"
       - key: MAX_ORDER_MXN
         value: "200"
       - key: MAX_DAILY_LOSS_MXN

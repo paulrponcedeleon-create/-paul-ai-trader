@@ -5,14 +5,15 @@ import time
 from typing import Any
 import httpx
 
-from app.config import settings
+from app.config import Settings, settings
 
 class BitsoError(RuntimeError):
     pass
 
 class BitsoClient:
-    def __init__(self) -> None:
-        self.base_url = settings.bitso_base_url.rstrip("/")
+    def __init__(self, client_settings: Settings | None = None) -> None:
+        self.settings = client_settings or settings
+        self.base_url = self.settings.bitso_base_url.rstrip("/")
 
     @staticmethod
     def _path(endpoint: str) -> str:
@@ -20,17 +21,17 @@ class BitsoClient:
         return f"/api/v3/{clean}"
 
     def _auth_header(self, method: str, endpoint: str, payload: dict[str, Any] | None = None) -> str:
-        if not settings.bitso_api_key or not settings.bitso_api_secret:
+        if not self.settings.bitso_api_key or not self.settings.bitso_api_secret:
             raise BitsoError("Faltan las credenciales privadas de Bitso.")
         nonce = str(time.time_ns())
         body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False) if payload else ""
         message = f"{nonce}{method.upper()}{self._path(endpoint)}{body}"
         signature = hmac.new(
-            settings.bitso_api_secret.encode("utf-8"),
+            self.settings.bitso_api_secret.encode("utf-8"),
             message.encode("utf-8"),
             hashlib.sha256,
         ).hexdigest()
-        return f"Bitso {settings.bitso_api_key}:{nonce}:{signature}"
+        return f"Bitso {self.settings.bitso_api_key}:{nonce}:{signature}"
 
     async def _request(
         self,
