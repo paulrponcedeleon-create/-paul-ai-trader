@@ -16,6 +16,7 @@ from app.db.session import build_engine, build_session_factory
 from app.models import SimulatedOrderRequest
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
 from app.services.bitso import BitsoClient, BitsoError
+from app.services.portfolio import calculate_position, summarize_positions
 from app.services.risk import validate_order
 from app.services.store import add_simulation, list_simulations
 from app.services.strategy import momentum_signal
@@ -54,6 +55,16 @@ def create_app(
     application.state.db_engine = engine
     application.state.db_session_factory = session_factory
     application.include_router(auth_router)
+
+    async def get_market_ticker(book: str) -> dict:
+        try:
+            result = await current_bitso.ticker(book)
+            ticker = result.get("payload", result)
+            if float(ticker["last"]) <= 0:
+                raise ValueError("Precio de mercado inválido.")
+            return ticker
+        except (BitsoError, KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @application.on_event("shutdown")
     def dispose_database_engine() -> None:
@@ -100,23 +111,24 @@ def create_app(
         book = book.lower()
         if book not in current_settings.allowed_books_set:
             raise HTTPException(status_code=403, detail="Mercado no autorizado.")
+
+        ticker = await get_market_ticker(book)
         try:
-            result = await current_bitso.ticker(book)
-            ticker = result.get("payload", result)
             signal = momentum_signal(
                 last=float(ticker["last"]),
                 high=float(ticker["high"]),
                 low=float(ticker["low"]),
                 volume=float(ticker.get("volume", 0)),
             )
-            return {
-                "book": book,
-                "ticker": ticker,
-                "signal": signal.__dict__,
-                "warning": "Señal educativa; no garantiza ganancias.",
-            }
-        except (BitsoError, KeyError, TypeError, ValueError) as exc:
+        except (KeyError, TypeError, ValueError) as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        return {
+            "book": book,
+            "ticker": ticker,
+            "signal": signal.__dict__,
+            "warning": "Señal educativa; no garantiza ganancias.",
+        }
 
     @application.get("/api/balance")
     async def balance(request: Request):
@@ -137,6 +149,69 @@ def create_app(
             repository = SqlSimulatedOrderRepository(db_session)
             return list_simulations(repository, limit=limit, offset=offset)
 
+    @application.get("/api/positions")
+    async def positions(request: Request):
+        require_auth(request)
+        with session_factory() as db_session:
+            repository = SqlSimulatedOrderRepository(db_session)
+            open_orders = repository.list_open()
+
+        prices: dict[str, float] = {}
+        for book in sorted({str(item["book"]) for item in open_orders}):
+            ticker = await get_market_ticker(book)
+            prices[book] = float(ticker["last"])
+
+        items = [
+            calculate_position(item, prices[str(item["book"])])
+            for item in open_orders
+        ]
+        return {
+            "items": items,
+            "summary": summarize_positions(items),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "fees_included": False,
+        }
+
+    @application.post("/api/simulations/{simulation_id}/close")
+    async def close_simulation(simulation_id: str, request: Request):
+        require_auth(request)
+        with session_factory() as db_session:
+            repository = SqlSimulatedOrderRepository(db_session)
+            open_order = repository.get_open(simulation_id)
+
+        if open_order is None:
+            raise HTTPException(
+                status_code=404,
+                detail="La posición no existe o ya fue cerrada.",
+            )
+
+        ticker = await get_market_ticker(str(open_order["book"]))
+        close_price = float(ticker["last"])
+        calculated = calculate_position(open_order, close_price)
+        closed_at = datetime.now(timezone.utc)
+
+        with session_factory() as db_session:
+            repository = SqlSimulatedOrderRepository(db_session)
+            closed = repository.close(
+                simulation_id,
+                closed_at=closed_at,
+                close_price=close_price,
+                realized_pnl_mxn=float(calculated["unrealized_pnl_mxn"]),
+            )
+            if closed is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="La posición ya fue cerrada.",
+                )
+            db_session.commit()
+
+        return {
+            **closed,
+            "asset_quantity": calculated["asset_quantity"],
+            "current_value_mxn": calculated["current_value_mxn"],
+            "return_pct": calculated["return_pct"],
+        }
+
     @application.post("/api/orders")
     async def order(body: SimulatedOrderRequest, request: Request):
         require_auth(request)
@@ -152,13 +227,17 @@ def create_app(
             raise HTTPException(status_code=403, detail=decision.reason)
 
         if not current_settings.live_trading:
+            book = body.book.lower()
+            ticker = await get_market_ticker(book)
+            entry_price = float(ticker["last"])
             item = {
                 "id": secrets.token_hex(6),
                 "created_at": datetime.now(timezone.utc),
-                "status": "simulated",
-                "book": body.book.lower(),
+                "status": "open",
+                "book": book,
                 "side": body.side,
                 "amount_mxn": round(body.amount_mxn, 2),
+                "reference_price": entry_price,
                 "risk_check": decision.reason,
             }
             with session_factory() as db_session:
