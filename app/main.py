@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import secrets
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -147,11 +147,15 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @application.get("/api/simulations")
-    async def simulations(request: Request):
+    async def simulations(
+        request: Request,
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ):
         require_auth(request)
         with session_factory() as db_session:
             repository = SqlSimulatedOrderRepository(db_session)
-            return {"items": list_simulations(repository)}
+            return list_simulations(repository, limit=limit, offset=offset)
 
     @application.post("/api/orders")
     async def order(body: SimulatedOrderRequest, request: Request):
