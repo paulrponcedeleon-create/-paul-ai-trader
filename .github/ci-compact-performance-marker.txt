@@ -1,0 +1,1 @@
+Temporary validation marker for compact dashboard and performance analytics.
