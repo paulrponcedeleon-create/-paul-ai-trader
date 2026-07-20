@@ -4,10 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>{{ app_name }}</title>
-  <link rel="stylesheet" href="/static/app.css?v=20260720-6">
-  <link rel="stylesheet" href="/static/markets.css?v=20260720-4">
+  <link rel="stylesheet" href="/static/app.css?v=20260720-8">
+  <link rel="stylesheet" href="/static/market-panel-v2.css?v=20260720-1">
 </head>
 <body>
+  {% set curated_assets = [
+    ('btc_mxn', 'BTC', 'Bitcoin'),
+    ('eth_mxn', 'ETH', 'Ether'),
+    ('sol_mxn', 'SOL', 'Solana'),
+    ('atom_mxn', 'ATOM', 'Cosmos'),
+    ('mxn_cash', 'MXN', 'Peso mexicano'),
+    ('usdc_mxn', 'USD', 'Dólar digital (USDC)'),
+    ('usdt_mxn', 'USDT', 'Tether'),
+    ('paxg_mxn', 'PAXG', 'PAX Gold'),
+    ('xrp_mxn', 'XRP', 'XRP'),
+    ('algn_mxn', 'ALGN', 'Align Technology'),
+    ('pstg_mxn', 'PSTG', 'Everpure, Inc.'),
+    ('tsla_mxn', 'TSLA', 'Tesla'),
+    ('aapl_mxn', 'AAPL', 'Apple')
+  ] %}
+
   <main class="shell">
     <header>
       <div>
@@ -71,7 +87,7 @@
         <div id="openPositions" class="positions-list">
           <p>No hay posiciones abiertas.</p>
         </div>
-        <p class="portfolio-note">Resumen compacto. Toca una posición para ver precio de entrada, comisiones, equilibrio y la opción de cerrarla. Actualización automática cada 5 segundos.</p>
+        <p class="portfolio-note">Verde indica ganancia, rojo pérdida y azul equilibrio. Toca una posición para ver precio de entrada, comisiones, equilibrio y cerrarla. Actualización automática cada 5 segundos.</p>
       </section>
 
       <section class="card">
@@ -82,11 +98,41 @@
             <button class="secondary" id="refreshBtn">Actualizar</button>
           </div>
         </div>
-        <div class="books">
-          {% for book in allowed_books %}
-          <button class="book {% if loop.first %}active{% endif %}" data-book="{{ book }}">{{ book|upper }}</button>
+
+        <p id="marketCatalogStatusV2" class="market-catalog-status">Cargando señales y precios…</p>
+
+        <div id="marketFiltersV2" class="market-filters">
+          <div class="market-filter-group">
+            <span>Tipo</span>
+            <button type="button" class="market-filter active" data-type-filter="all">Todos</button>
+            <button type="button" class="market-filter" data-type-filter="markets">Cripto y monedas</button>
+            <button type="button" class="market-filter" data-type-filter="stocks">Acciones</button>
+          </div>
+          <div class="market-filter-group">
+            <span>Señal</span>
+            <button type="button" class="market-filter active" data-signal-filter="all">Todas</button>
+            <button type="button" class="market-filter filter-buy" data-signal-filter="buy">Comprar</button>
+            <button type="button" class="market-filter filter-hold" data-signal-filter="hold">Mantener</button>
+            <button type="button" class="market-filter filter-sell" data-signal-filter="sell">Vender</button>
+          </div>
+        </div>
+
+        <div id="marketGridV2" class="books market-grid-v2">
+          {% for asset in curated_assets %}
+            {% if asset[0] in allowed_books %}
+            <button type="button" class="book market-book-v2 signal-hold {% if asset[0] == 'btc_mxn' %}active{% endif %}" data-book="{{ asset[0] }}">
+              <span class="market-card-head">
+                <span><strong class="market-symbol">{{ asset[1] }}</strong><small>{{ asset[2] }}</small></span>
+                <strong class="market-action">MANTENER</strong>
+              </span>
+              <span class="market-price">Cargando…</span>
+              <small>Consultando costo</small>
+              <small class="market-route">Consultando Bitso</small>
+            </button>
+            {% endif %}
           {% endfor %}
         </div>
+
         <div id="marketResult" class="market-result">
           <p>Selecciona un activo para consultar su señal.</p>
         </div>
@@ -96,14 +142,20 @@
         <p class="eyebrow">ORDEN CONTROLADA</p>
         <h2>Abrir posición simulada</h2>
         <form id="orderForm" class="order-form">
-          <label>Activo<select id="orderBook">
-            {% for book in allowed_books %}<option value="{{ book }}">{{ book|upper }}</option>{% endfor %}
-          </select></label>
+          <label>Activo
+            <select id="orderBook">
+              {% for asset in curated_assets %}
+                {% if asset[0] in allowed_books and asset[0] != 'mxn_cash' %}
+                <option value="{{ asset[0] }}">{{ asset[1] }} · {{ asset[2] }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </label>
           <label>Acción<select id="orderSide"><option value="buy">Comprar</option><option value="sell">Vender (corta)</option></select></label>
           <label>Monto MXN<input id="orderAmount" type="number" min="1" max="{{ max_order }}" value="100"></label>
           <button type="submit">Abrir simulación</button>
         </form>
-        <p class="muted">Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN. Cripto usa la ruta de Bitso disponible y sus comisiones; acciones usan 0% de comisión de compraventa y una referencia externa de precio. El spread no está garantizado.</p>
+        <p class="muted">Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN. Cripto usa la ruta de Bitso disponible y sus comisiones; acciones usan referencia de precio en USD convertida a MXN.</p>
         <p id="orderMessage"></p>
       </section>
 
@@ -143,7 +195,20 @@
       </footer>
     </div>
   </main>
-  <script src="/static/app.js?v=20260720-7"></script>
-  <script src="/static/market-catalog.js?v=20260720-4"></script>
+
+  <script src="/static/app.js?v=20260720-8"></script>
+  <script>
+    window.marketBridge = {
+      getSelected: () => selectedBook,
+      select: book => {
+        selectedBook = book;
+        const option = document.querySelector(`#orderBook option[value="${book}"]`);
+        if (option) document.querySelector("#orderBook").value = book;
+        return refreshMarket();
+      },
+      refresh: () => refreshMarket()
+    };
+  </script>
+  <script src="/static/market-panel-v2.js?v=20260720-1"></script>
 </body>
 </html>
