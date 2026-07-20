@@ -1,8 +1,10 @@
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 import secrets
+import time
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -22,6 +24,8 @@ from app.services.store import add_simulation, list_simulations
 from app.services.strategy import momentum_signal
 
 BASE_DIR = Path(__file__).resolve().parent
+FALLBACK_TAKER_FEE_RATE = 0.0078
+FEE_CACHE_SECONDS = 900
 
 
 def create_app(
@@ -56,6 +60,10 @@ def create_app(
     application.state.db_session_factory = session_factory
     application.include_router(auth_router)
 
+    fee_cache: dict[str, float] = {}
+    fee_cache_source = "public_fallback"
+    fee_cache_until = 0.0
+
     async def get_market_ticker(book: str) -> dict:
         try:
             result = await current_bitso.ticker(book)
@@ -65,6 +73,38 @@ def create_app(
             return ticker
         except (BitsoError, KeyError, TypeError, ValueError) as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    async def get_taker_fee_rates(books: set[str]) -> tuple[dict[str, float], str]:
+        nonlocal fee_cache_source, fee_cache_until
+        if not books:
+            return {}, fee_cache_source
+
+        now = time.monotonic()
+        if now < fee_cache_until and all(book in fee_cache for book in books):
+            return {book: fee_cache[book] for book in books}, fee_cache_source
+
+        rates: dict[str, float] = {}
+        source = "bitso_account"
+        try:
+            result = await current_bitso.fees()
+            payload = result.get("payload", result)
+            for item in payload.get("fees", []):
+                book = str(item.get("book", "")).lower()
+                raw_rate = item.get("taker_fee_decimal") or item.get("fee_decimal")
+                if book and raw_rate is not None:
+                    parsed = float(raw_rate)
+                    if 0 <= parsed < 1:
+                        rates[book] = parsed
+        except (BitsoError, KeyError, TypeError, ValueError, AttributeError):
+            source = "public_fallback"
+
+        for book in books:
+            rates.setdefault(book, FALLBACK_TAKER_FEE_RATE)
+
+        fee_cache.update(rates)
+        fee_cache_source = source
+        fee_cache_until = now + FEE_CACHE_SECONDS
+        return {book: fee_cache[book] for book in books}, fee_cache_source
 
     @application.on_event("shutdown")
     def dispose_database_engine() -> None:
@@ -106,8 +146,9 @@ def create_app(
         }
 
     @application.get("/api/market/{book}")
-    async def market(book: str, request: Request):
+    async def market(book: str, request: Request, response: Response):
         require_auth(request)
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         book = book.lower()
         if book not in current_settings.allowed_books_set:
             raise HTTPException(status_code=403, detail="Mercado no autorizado.")
@@ -150,26 +191,46 @@ def create_app(
             return list_simulations(repository, limit=limit, offset=offset)
 
     @application.get("/api/positions")
-    async def positions(request: Request):
+    async def positions(request: Request, response: Response):
         require_auth(request)
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+
         with session_factory() as db_session:
             repository = SqlSimulatedOrderRepository(db_session)
             open_orders = repository.list_open()
 
-        prices: dict[str, float] = {}
-        for book in sorted({str(item["book"]) for item in open_orders}):
-            ticker = await get_market_ticker(book)
-            prices[book] = float(ticker["last"])
+        books = sorted({str(item["book"]) for item in open_orders})
+        if books:
+            ticker_results, fee_result = await asyncio.gather(
+                asyncio.gather(*(get_market_ticker(book) for book in books)),
+                get_taker_fee_rates(set(books)),
+            )
+            fee_rates, fee_source = fee_result
+            prices = {
+                book: float(ticker["last"])
+                for book, ticker in zip(books, ticker_results, strict=True)
+            }
+        else:
+            prices = {}
+            fee_rates = {}
+            fee_source = fee_cache_source
 
         items = [
-            calculate_position(item, prices[str(item["book"])])
+            calculate_position(
+                item,
+                prices[str(item["book"])],
+                exit_fee_rate=fee_rates.get(str(item["book"]), FALLBACK_TAKER_FEE_RATE),
+            )
             for item in open_orders
         ]
         return {
             "items": items,
             "summary": summarize_positions(items),
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            "fees_included": False,
+            "refresh_seconds": 5,
+            "fees_included": True,
+            "fee_source": fee_source,
         }
 
     @application.post("/api/simulations/{simulation_id}/close")
@@ -185,9 +246,19 @@ def create_app(
                 detail="La posición no existe o ya fue cerrada.",
             )
 
-        ticker = await get_market_ticker(str(open_order["book"]))
+        book = str(open_order["book"])
+        ticker, fee_result = await asyncio.gather(
+            get_market_ticker(book),
+            get_taker_fee_rates({book}),
+        )
+        fee_rates, _ = fee_result
+        exit_fee_rate = fee_rates[book]
         close_price = float(ticker["last"])
-        calculated = calculate_position(open_order, close_price)
+        calculated = calculate_position(
+            open_order,
+            close_price,
+            exit_fee_rate=exit_fee_rate,
+        )
         closed_at = datetime.now(timezone.utc)
 
         with session_factory() as db_session:
@@ -196,6 +267,8 @@ def create_app(
                 simulation_id,
                 closed_at=closed_at,
                 close_price=close_price,
+                exit_fee_rate=exit_fee_rate,
+                exit_fee_mxn=float(calculated["estimated_exit_fee_mxn"]),
                 realized_pnl_mxn=float(calculated["unrealized_pnl_mxn"]),
             )
             if closed is None:
@@ -210,6 +283,7 @@ def create_app(
             "asset_quantity": calculated["asset_quantity"],
             "current_value_mxn": calculated["current_value_mxn"],
             "return_pct": calculated["return_pct"],
+            "total_estimated_fees_mxn": calculated["total_estimated_fees_mxn"],
         }
 
     @application.post("/api/orders")
@@ -228,7 +302,12 @@ def create_app(
 
         if not current_settings.live_trading:
             book = body.book.lower()
-            ticker = await get_market_ticker(book)
+            ticker, fee_result = await asyncio.gather(
+                get_market_ticker(book),
+                get_taker_fee_rates({book}),
+            )
+            fee_rates, fee_source = fee_result
+            entry_fee_rate = fee_rates[book]
             entry_price = float(ticker["last"])
             item = {
                 "id": secrets.token_hex(6),
@@ -238,6 +317,8 @@ def create_app(
                 "side": body.side,
                 "amount_mxn": round(body.amount_mxn, 2),
                 "reference_price": entry_price,
+                "entry_fee_rate": entry_fee_rate,
+                "entry_fee_mxn": round(body.amount_mxn * entry_fee_rate, 2),
                 "risk_check": decision.reason,
             }
             with session_factory() as db_session:
@@ -248,6 +329,7 @@ def create_app(
                     **saved_item,
                     "status": "simulated",
                     "position_status": saved_item["status"],
+                    "fee_source": fee_source,
                 }
 
         try:
