@@ -37,6 +37,7 @@
   color: #344054;
   font-size: 11px;
   font-weight: 800;
+  touch-action: manipulation;
 }
 
 .market-filter.active {
@@ -67,8 +68,30 @@
   padding: 13px;
   border: 2px solid transparent;
   border-radius: 14px;
-  transition: transform .18s ease, box-shadow .18s ease;
+  transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease;
+  touch-action: manipulation;
 }
+
+.books.market-grid-v2 .market-book-v2[hidden] { display: none !important; }
+.books.market-grid-v2 .market-book-v2.market-loading { opacity: .78; }
+.books.market-grid-v2 .market-book-v2.market-loading .market-price::after {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-left: 8px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: market-spin .7s linear infinite;
+}
+
+.books.market-grid-v2 .market-book-v2.market-load-error {
+  border-style: dashed;
+  cursor: pointer;
+}
+
+@keyframes market-spin { to { transform: rotate(360deg); } }
 
 .books.market-grid-v2 .market-book-v2:hover {
   transform: translateY(-1px);
@@ -154,7 +177,6 @@
   color: #fff !important;
 }
 
-/* El portafolio también debe comunicar visualmente el resultado completo. */
 .position-row:has(.compact-result .negative),
 .position-row:has(.compact-result .negative) .position-summary,
 .position-row:has(.compact-result .negative) .position-details {
