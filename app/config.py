@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./paul_ai_trader.db"
 
     live_trading: bool = False
+    simulated_initial_capital_mxn: float = 1000.0
     max_order_mxn: float = 200.0
     max_daily_loss_mxn: float = 100.0
     max_open_orders: int = 3
@@ -80,6 +81,8 @@ class Settings(BaseSettings):
     def validate_security_configuration(self) -> "Settings":
         if self.session_max_age_seconds <= 0:
             raise ValueError("SESSION_MAX_AGE_SECONDS debe ser mayor que cero.")
+        if self.simulated_initial_capital_mxn <= 0:
+            raise ValueError("SIMULATED_INITIAL_CAPITAL_MXN debe ser mayor que cero.")
 
         if self.session_cookie_samesite == "none" and not self.resolved_session_cookie_secure:
             raise ValueError("SameSite=None requiere SESSION_COOKIE_SECURE=true.")
