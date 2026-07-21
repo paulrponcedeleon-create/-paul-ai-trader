@@ -10,20 +10,30 @@ def test_capital_endpoint_and_order_balance(client):
     assert capital.status_code == 200
     assert capital.json()["available_cash_mxn"] == 1000.0
 
-    for _ in range(3):
-        response = client.post(
-            "/api/orders",
-            json={"book": "btc_mxn", "side": "buy", "amount_mxn": 200},
-        )
-        assert response.status_code == 200
+    session_factory = client.app.state.db_session_factory
+    with session_factory() as session:
+        repository = SqlSimulatedOrderRepository(session)
+        repository.add({
+            "id": "large-open-position",
+            "created_at": datetime.now(timezone.utc),
+            "status": "open",
+            "book": "btc_mxn",
+            "side": "buy",
+            "amount_mxn": 900.0,
+            "reference_price": 100.0,
+            "entry_fee_rate": 0.0,
+            "entry_fee_mxn": 0.0,
+            "risk_check": "ok",
+        })
+        session.commit()
 
     capital_after = client.get("/api/capital").json()
-    assert capital_after["available_cash_mxn"] == 400.0
-    assert capital_after["open_invested_mxn"] == 600.0
+    assert capital_after["available_cash_mxn"] == 100.0
+    assert capital_after["open_invested_mxn"] == 900.0
 
     blocked = client.post(
         "/api/orders",
-        json={"book": "eth_mxn", "side": "buy", "amount_mxn": 500},
+        json={"book": "eth_mxn", "side": "buy", "amount_mxn": 200},
     )
     assert blocked.status_code == 403
     assert "Saldo insuficiente" in blocked.json()["detail"]
