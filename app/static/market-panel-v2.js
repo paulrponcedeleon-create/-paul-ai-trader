@@ -5,13 +5,27 @@
   const orderBook = document.querySelector("#orderBook");
   if (!grid) return;
 
-  const actionLabels = {buy: "COMPRAR", hold: "MANTENER", sell: "VENDER"};
-  const CACHE_KEY = "paul-market-card-cache-v2";
+  const actionLabels = {buy: "COMPRAR", hold: "MANTENER", sell: "VENDER SI TIENES"};
+  const CACHE_KEY = "paul-market-card-cache-v3";
   const REQUEST_TIMEOUT_MS = 5000;
   let typeFilter = "all";
   let signalFilter = "all";
   let loadedCount = 0;
   let failedCount = 0;
+
+  const sellFilter = filters?.querySelector('[data-signal-filter="sell"]');
+  if (sellFilter) sellFilter.textContent = "Vender si tienes";
+
+  const sideSelect = document.querySelector("#orderSide");
+  if (sideSelect) {
+    sideSelect.value = "buy";
+    const label = sideSelect.closest("label");
+    if (label) label.hidden = true;
+  }
+  const orderTitle = document.querySelector("#orderForm")?.previousElementSibling;
+  if (orderTitle?.tagName === "H2") orderTitle.textContent = "Abrir compra simulada";
+  const orderButton = document.querySelector('#orderForm button[type="submit"]');
+  if (orderButton) orderButton.textContent = "Comprar en simulación";
 
   const cards = [...grid.querySelectorAll("[data-book]")];
   const catalog = new Map(cards.map(card => {
@@ -92,8 +106,7 @@
       card.hidden = !(typeMatches && signalMatches);
     });
     const visible = cards.filter(card => !card.hidden).length;
-    const empty = grid.querySelector(".market-empty");
-    if (empty) empty.remove();
+    grid.querySelector(".market-empty")?.remove();
     if (!visible) {
       const message = document.createElement("p");
       message.className = "market-empty";
@@ -104,9 +117,9 @@
 
   function updateStatus() {
     const pending = Math.max(0, cards.length - loadedCount - failedCount);
-    if (pending) status.textContent = `${loadedCount} listos · ${pending} cargando · los filtros ya funcionan`;
+    if (pending) status.textContent = `${loadedCount} listos · ${pending} cargando · filtros instantáneos`;
     else if (failedCount) status.textContent = `${loadedCount} listos · ${failedCount} sin respuesta · toca una tarjeta para reintentar`;
-    else status.textContent = `${loadedCount} activos actualizados · verde comprar · azul mantener · rojo vender`;
+    else status.textContent = `${loadedCount} activos actualizados · rojo significa vender solo si ya tienes posición`;
   }
 
   function withTimeout(promise, ms) {
@@ -159,6 +172,7 @@
   }
 
   filters?.addEventListener("click", event => {
+    event.preventDefault();
     const typeButton = event.target.closest("[data-type-filter]");
     const signalButton = event.target.closest("[data-signal-filter]");
     if (typeButton) {
@@ -189,7 +203,5 @@
   cards.forEach(card => updateCard(card.dataset.book));
   applyFilters();
   updateStatus();
-
-  // Load independently. Fast Bitso books paint immediately; slow RFQ/stocks no longer block them.
   cards.forEach(card => loadBook(card.dataset.book));
 })();
