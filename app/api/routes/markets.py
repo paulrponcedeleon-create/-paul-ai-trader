@@ -27,24 +27,17 @@ def _market_service(request: Request) -> UnifiedMarketService:
 
 
 @router.get("/markets")
-async def markets(
-    request: Request,
-    response: Response,
-    force: bool = Query(default=False),
-):
+async def markets(request: Request, response: Response, force: bool = Query(default=False)):
     require_auth(request)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
-
     now = time.monotonic()
     cached = getattr(request.app.state, "market_catalog_cache", None)
     cache_until = getattr(request.app.state, "market_catalog_until", 0.0)
     if not force and cached and now < cache_until:
         return cached
-
     settings = request.app.state.settings
-    service = _market_service(request)
-    items = await service.catalog(settings.allowed_books_set)
+    items = await _market_service(request).catalog(settings.allowed_books_set)
     result = {
         "items": items,
         "count": len(items),
@@ -65,7 +58,6 @@ async def market(book: str, request: Request, response: Response):
     book = book.lower()
     if book not in settings.allowed_books_set:
         raise HTTPException(status_code=403, detail="Mercado no autorizado.")
-
     try:
         quote = await _market_service(request).quote(book, force=True, side="buy")
         signal = (
@@ -80,27 +72,18 @@ async def market(book: str, request: Request, response: Response):
         )
     except (UnifiedMarketError, BitsoError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-
     if quote["asset_type"] == "cash":
-        reason = "Efectivo disponible; no tiene movimiento de mercado."
-        confidence = 100
+        reason, confidence = "Efectivo disponible; no tiene movimiento de mercado.", 100
     elif quote["source"] == "bitso_rfq":
-        reason = "Conversión disponible en Bitso App; no hay rango Alpha de 24 h comparable."
-        confidence = 50
+        reason, confidence = "Conversión disponible en Bitso App; no hay rango Alpha de 24 h comparable.", 50
     else:
-        reason = signal.reason
-        confidence = signal.confidence
-
-    signal_payload = (
-        signal.__dict__
-        if signal is not None
-        else {
-            "action": "hold",
-            "confidence": confidence,
-            "reason": reason,
-            "reference_price": float(quote["last"]),
-        }
-    )
+        reason, confidence = signal.reason, signal.confidence
+    signal_payload = signal.__dict__ if signal is not None else {
+        "action": "hold",
+        "confidence": confidence,
+        "reason": reason,
+        "reference_price": float(quote["last"]),
+    }
     return {
         "book": book,
         "ticker": quote,
@@ -114,22 +97,19 @@ async def positions(request: Request, response: Response):
     require_auth(request)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
+    settings = request.app.state.settings
     session_factory = request.app.state.db_session_factory
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
         open_orders = repository.list_open()
+        ledger = repository.capital_ledger(settings.simulated_initial_capital_mxn)
 
     service = _market_service(request)
     items = []
     fee_sources: set[str] = set()
     for item in open_orders:
-        close_side = "sell" if item["side"] == "buy" else "buy"
         try:
-            quote = await service.quote(
-                str(item["book"]),
-                force=True,
-                side=close_side,
-            )
+            quote = await service.quote(str(item["book"]), force=True, side="sell")
         except (UnifiedMarketError, BitsoError) as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         fee_sources.add(str(quote["fee_source"]))
@@ -138,23 +118,26 @@ async def positions(request: Request, response: Response):
             float(quote["last"]),
             exit_fee_rate=float(quote["effective_fee_rate"]),
         )
-        calculated.update(
-            {
-                "symbol": quote["symbol"],
-                "name": quote["name"],
-                "asset_type": quote["asset_type"],
-                "route": quote["route"],
-                "route_label": quote.get("route_label"),
-                "quote_source": quote["source"],
-                "fee_included_in_quote": quote.get("fee_included_in_quote", False),
-                "delayed": quote["delayed"],
-            }
-        )
+        calculated.update({
+            "symbol": quote["symbol"],
+            "name": quote["name"],
+            "asset_type": quote["asset_type"],
+            "route": quote["route"],
+            "route_label": quote.get("route_label"),
+            "quote_source": quote["source"],
+            "fee_included_in_quote": quote.get("fee_included_in_quote", False),
+            "delayed": quote["delayed"],
+        })
         items.append(calculated)
 
+    summary = summarize_positions(items)
+    summary.update(ledger)
+    summary["account_equity_mxn"] = round(
+        ledger["available_cash_mxn"] + float(summary["current_value_mxn"]), 2
+    )
     return {
         "items": items,
-        "summary": summarize_positions(items),
+        "summary": summary,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "refresh_seconds": 5,
         "fees_included": True,
@@ -169,29 +152,16 @@ async def close_simulation(simulation_id: str, request: Request):
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
         open_order = repository.get_open(simulation_id)
-
     if open_order is None:
         raise HTTPException(status_code=404, detail="La posición no existe o ya fue cerrada.")
-
-    close_side = "sell" if open_order["side"] == "buy" else "buy"
     try:
-        quote = await _market_service(request).quote(
-            str(open_order["book"]),
-            force=True,
-            side=close_side,
-        )
+        quote = await _market_service(request).quote(str(open_order["book"]), force=True, side="sell")
     except (UnifiedMarketError, BitsoError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-
     exit_fee_rate = float(quote["effective_fee_rate"])
     close_price = float(quote["last"])
-    calculated = calculate_position(
-        open_order,
-        close_price,
-        exit_fee_rate=exit_fee_rate,
-    )
+    calculated = calculate_position(open_order, close_price, exit_fee_rate=exit_fee_rate)
     closed_at = datetime.now(timezone.utc)
-
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
         closed = repository.close(
@@ -205,7 +175,6 @@ async def close_simulation(simulation_id: str, request: Request):
         if closed is None:
             raise HTTPException(status_code=409, detail="La posición ya fue cerrada.")
         db_session.commit()
-
     return {
         **closed,
         "symbol": quote["symbol"],
@@ -232,14 +201,27 @@ async def order(body: SimulatedOrderRequest, request: Request):
     )
     if not decision.allowed:
         raise HTTPException(status_code=403, detail=decision.reason)
+    if not settings.live_trading and body.side != "buy":
+        raise HTTPException(
+            status_code=403,
+            detail="En simulación spot solo puedes comprar. Para vender, cierra una posición abierta.",
+        )
+
+    session_factory = request.app.state.db_session_factory
+    if not settings.live_trading:
+        with session_factory() as db_session:
+            repository = SqlSimulatedOrderRepository(db_session)
+            ledger = repository.capital_ledger(settings.simulated_initial_capital_mxn)
+        available = float(ledger["available_cash_mxn"])
+        if body.amount_mxn > available + 1e-9:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Saldo insuficiente. Disponible: ${available:,.2f} MXN.",
+            )
 
     book = body.book.lower()
     try:
-        quote = await _market_service(request).quote(
-            book,
-            force=True,
-            side=body.side,
-        )
+        quote = await _market_service(request).quote(book, force=True, side="buy")
     except (UnifiedMarketError, BitsoError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     if not quote["tradeable"]:
@@ -252,33 +234,29 @@ async def order(body: SimulatedOrderRequest, request: Request):
                 detail="El modo real solo permite libros cripto autorizados directamente contra MXN.",
             )
         try:
-            result = await request.app.state.bitso.place_market_order(
-                book, body.side, body.amount_mxn
-            )
+            result = await request.app.state.bitso.place_market_order(book, body.side, body.amount_mxn)
         except BitsoError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"status": "submitted", "risk_check": decision.reason, "bitso": result}
 
     entry_fee_rate = float(quote["effective_fee_rate"])
-    entry_price = float(quote["last"])
     item = {
         "id": secrets.token_hex(6),
         "created_at": datetime.now(timezone.utc),
         "status": "open",
         "book": book,
-        "side": body.side,
+        "side": "buy",
         "amount_mxn": round(body.amount_mxn, 2),
-        "reference_price": entry_price,
+        "reference_price": float(quote["last"]),
         "entry_fee_rate": entry_fee_rate,
         "entry_fee_mxn": round(body.amount_mxn * entry_fee_rate, 2),
         "risk_check": decision.reason,
     }
-    session_factory = request.app.state.db_session_factory
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
         saved_item = add_simulation(item, repository)
         db_session.commit()
-
+        ledger_after = repository.capital_ledger(settings.simulated_initial_capital_mxn)
     return {
         **saved_item,
         "status": "simulated",
@@ -290,4 +268,5 @@ async def order(body: SimulatedOrderRequest, request: Request):
         "route_label": quote.get("route_label"),
         "fee_source": quote["fee_source"],
         "fee_included_in_quote": quote.get("fee_included_in_quote", False),
+        "available_cash_mxn": ledger_after["available_cash_mxn"],
     }
