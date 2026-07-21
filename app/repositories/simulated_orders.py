@@ -57,6 +57,30 @@ class SqlSimulatedOrderRepository:
         ).all()
         return [row.to_dict() for row in rows]
 
+    def capital_ledger(self, initial_capital_mxn: float) -> dict[str, float]:
+        open_invested = self.session.scalar(
+            select(func.coalesce(func.sum(SimulatedOrder.amount_mxn), 0.0)).where(
+                SimulatedOrder.status == "open"
+            )
+        )
+        realized_pnl = self.session.scalar(
+            select(func.coalesce(func.sum(SimulatedOrder.realized_pnl_mxn), 0.0)).where(
+                SimulatedOrder.status == "closed",
+                SimulatedOrder.realized_pnl_mxn.is_not(None),
+            )
+        )
+        initial = float(initial_capital_mxn)
+        invested = float(open_invested or 0.0)
+        realized = float(realized_pnl or 0.0)
+        available = initial + realized - invested
+        return {
+            "initial_capital_mxn": round(initial, 2),
+            "open_invested_mxn": round(invested, 2),
+            "realized_pnl_mxn": round(realized, 2),
+            "available_cash_mxn": round(max(0.0, available), 2),
+            "account_equity_before_unrealized_mxn": round(initial + realized, 2),
+        }
+
     def get_open(self, simulation_id: str) -> dict[str, Any] | None:
         row = self.session.get(SimulatedOrder, simulation_id)
         if row is None or row.status != "open" or row.reference_price is None:
