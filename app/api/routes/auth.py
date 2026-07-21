@@ -3,11 +3,13 @@ import secrets
 from fastapi import APIRouter, HTTPException, Request
 
 from app.api.dependencies import SESSION_AUTH_KEY
+from app.api.routes.capital import router as capital_router
 from app.api.routes.markets import router as markets_router
 from app.models import LoginRequest
 
 router = APIRouter(prefix="/api", tags=["auth"])
 router.include_router(markets_router)
+router.include_router(capital_router)
 
 
 @router.post("/login")
