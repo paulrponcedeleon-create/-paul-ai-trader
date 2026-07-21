@@ -23,6 +23,11 @@ def validate_order(
         return RiskDecision(False, f"Mercado no autorizado: {book}")
     if side not in {"buy", "sell"}:
         return RiskDecision(False, "Tipo de orden inválido.")
+    if not current_settings.live_trading and side == "sell":
+        return RiskDecision(
+            False,
+            "En simulación spot no puedes vender un activo que no tienes. Usa Cerrar posición sobre una compra abierta.",
+        )
     if amount_mxn <= 0:
         return RiskDecision(False, "El monto debe ser mayor que cero.")
     if amount_mxn > current_settings.max_order_mxn:
