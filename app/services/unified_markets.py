@@ -8,7 +8,7 @@ from typing import Any
 from app.services.bitso import BitsoClient, BitsoError
 from app.services.rfq_quotes import RfqQuoteError, RfqQuoteResolver
 from app.services.stocks import StockQuoteClient, StockQuoteError
-from app.services.strategy import momentum_signal
+from app.services.signals import momentum_signal
 
 
 @dataclass(frozen=True)
@@ -134,7 +134,9 @@ class UnifiedMarketService:
             [f"{major}_usd", "usdc_mxn"],
             [f"{major}_btc", "btc_mxn"],
         ]
-        valid = [route for route in candidates if all(leg in available for leg in route)]
+        valid = [
+            route for route in candidates if all(leg in available for leg in route)
+        ]
         if not valid:
             raise UnifiedMarketError(
                 f"Bitso no tiene libro Alpha ni conversión disponible para {major.upper()}."

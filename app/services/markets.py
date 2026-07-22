@@ -77,7 +77,9 @@ def build_market_catalog(
             }
         )
 
-    items.sort(key=lambda item: (-item["range_24_pct"], item["taker_fee_rate"], item["book"]))
+    items.sort(
+        key=lambda item: (-item["range_24_pct"], item["taker_fee_rate"], item["book"])
+    )
     if not items:
         return items
 

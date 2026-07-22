@@ -1,3 +1,9 @@
+import pytest
+
+pytest.importorskip("fastapi")
+
+pytestmark = pytest.mark.api
+
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -165,9 +171,7 @@ def test_curated_extra_assets_are_simulation_only(tmp_path: Path):
 
     fake_bitso = FakeBitsoClient()
     app = create_app(live_settings, fake_bitso)
-    app.state.unified_markets = UnifiedMarketService(
-        fake_bitso, FakeStockQuoteClient()
-    )
+    app.state.unified_markets = UnifiedMarketService(fake_bitso, FakeStockQuoteClient())
     with TestClient(app) as live_client:
         live_client.post("/api/login", json={"password": "test-password"})
         blocked = live_client.post(

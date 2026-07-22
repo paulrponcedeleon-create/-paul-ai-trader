@@ -17,7 +17,9 @@ def test_market_ui_restores_type_and_signal_filters():
     ):
         assert expected in javascript
 
-    assert "catalog.filter(item => typeMatches(item) && signalMatches(item))" in javascript
+    assert (
+        "catalog.filter(item => typeMatches(item) && signalMatches(item))" in javascript
+    )
     assert "catalog.map(item" in javascript
 
 

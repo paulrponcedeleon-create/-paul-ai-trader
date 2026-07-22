@@ -1,6 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
+
+pytest.importorskip("fastapi")
+pytest.importorskip("sqlalchemy")
+
+pytestmark = pytest.mark.api
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -10,7 +16,9 @@ from app.repositories.simulated_orders import SqlSimulatedOrderRepository
 
 
 def test_sql_repository_persists_simulated_orders(tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path / 'repo.db'}", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'repo.db'}", connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -39,7 +47,9 @@ def test_sql_repository_persists_simulated_orders(tmp_path):
 
 
 def test_sql_repository_lists_stable_pages_and_total(tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path / 'pages.db'}", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'pages.db'}", connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
     start = datetime(2026, 7, 20, tzinfo=timezone.utc)
@@ -94,13 +104,15 @@ def test_api_simulation_history_is_paginated(client: TestClient):
     assert pages[0].json()["total"] == 23
     assert [len(page.json()["items"]) for page in pages] == [5, 5, 5, 5, 3]
     assert [page.json()["next_offset"] for page in pages] == [5, 10, 15, 20, None]
-    assert [page.json()["has_more"] for page in pages] == [True, True, True, True, False]
-
-    all_ids = [
-        item["id"]
-        for page in pages
-        for item in page.json()["items"]
+    assert [page.json()["has_more"] for page in pages] == [
+        True,
+        True,
+        True,
+        True,
+        False,
     ]
+
+    all_ids = [item["id"] for page in pages for item in page.json()["items"]]
     assert len(all_ids) == len(set(all_ids)) == 23
     assert client.get("/api/simulations?limit=101").status_code == 422
 
@@ -174,7 +186,9 @@ def test_live_simulated_position_tracks_fees_and_closes_net_pnl(client, fake_bit
     assert client.post(f"/api/simulations/{opened_data['id']}/close").status_code == 404
 
 
-def test_api_simulation_survives_application_restart(test_settings, fake_bitso, tmp_path):
+def test_api_simulation_survives_application_restart(
+    test_settings, fake_bitso, tmp_path
+):
     db_url = f"sqlite:///{tmp_path / 'api.db'}"
     test_settings.database_url = db_url
 
@@ -182,7 +196,10 @@ def test_api_simulation_survives_application_restart(test_settings, fake_bitso, 
 
     first_app = create_app(test_settings, fake_bitso)
     with TestClient(first_app) as first_client:
-        assert first_client.get("/health").json() == {"status": "ok", "mode": "simulation"}
+        assert first_client.get("/health").json() == {
+            "status": "ok",
+            "mode": "simulation",
+        }
         login = first_client.post("/api/login", json={"password": "test-password"})
         assert login.status_code == 200
         order = first_client.post(

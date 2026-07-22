@@ -12,6 +12,22 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.dependencies import authenticated, require_auth
 from app.api.routes.auth import router as auth_router
+from app.api.routes.readiness import router as readiness_router
+from app.api.routes.pro_strategy import router as pro_strategy_router
+from app.api.routes.optimization import router as optimization_router
+from app.api.routes.paper import router as paper_router
+from app.api.routes.ai import router as ai_router
+from app.api.routes.broker import router as broker_router
+from app.api.routes.analytics import router as analytics_router
+from app.api.routes.market_data import router as market_data_router
+from app.api.routes.live import router as live_router
+from app.api.routes.system import router as system_router
+from app.api.routes.runtime import router as runtime_router
+from app.api.routes.burnin import router as burnin_router
+from app.api.routes.experiments import router as experiments_router
+from app.api.routes.research import router as research_router
+from app.api.routes.adaptive import router as adaptive_router
+from app.api.routes.validation import router as validation_router
 from app.config import Settings, settings
 from app.db.base import Base
 from app.db.session import build_engine, build_session_factory
@@ -22,7 +38,7 @@ from app.services.performance import resolve_period_range, summarize_closed_orde
 from app.services.portfolio import calculate_position, summarize_positions
 from app.services.risk import validate_order
 from app.services.store import add_simulation, list_simulations
-from app.services.strategy import momentum_signal
+from app.services.signals import momentum_signal
 
 BASE_DIR = Path(__file__).resolve().parent
 FALLBACK_TAKER_FEE_RATE = 0.0078
@@ -53,7 +69,9 @@ def create_app(
         same_site=current_settings.session_cookie_samesite,
         https_only=current_settings.resolved_session_cookie_secure,
     )
-    application.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+    application.mount(
+        "/static", StaticFiles(directory=BASE_DIR / "static"), name="static"
+    )
     templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
     application.state.settings = current_settings
@@ -61,6 +79,22 @@ def create_app(
     application.state.db_engine = engine
     application.state.db_session_factory = session_factory
     application.include_router(auth_router)
+    application.include_router(readiness_router)
+    application.include_router(pro_strategy_router)
+    application.include_router(optimization_router)
+    application.include_router(paper_router)
+    application.include_router(ai_router)
+    application.include_router(broker_router)
+    application.include_router(analytics_router)
+    application.include_router(market_data_router)
+    application.include_router(live_router)
+    application.include_router(system_router)
+    application.include_router(runtime_router)
+    application.include_router(burnin_router)
+    application.include_router(experiments_router)
+    application.include_router(research_router)
+    application.include_router(adaptive_router)
+    application.include_router(validation_router)
 
     fee_cache: dict[str, float] = {}
     fee_cache_source = "public_fallback"
@@ -161,7 +195,9 @@ def create_app(
     @application.get("/api/market/{book}")
     async def market(book: str, request: Request, response: Response):
         require_auth(request)
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Cache-Control"] = (
+            "no-store, no-cache, must-revalidate, max-age=0"
+        )
         book = book.lower()
         if book not in current_settings.allowed_books_set:
             raise HTTPException(status_code=403, detail="Mercado no autorizado.")
@@ -213,17 +249,19 @@ def create_app(
         end: date | None = Query(default=None),
     ):
         require_auth(request)
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Cache-Control"] = (
+            "no-store, no-cache, must-revalidate, max-age=0"
+        )
         response.headers["Pragma"] = "no-cache"
 
         selected_books = {
-            value.strip().lower()
-            for value in (books or "").split(",")
-            if value.strip()
+            value.strip().lower() for value in (books or "").split(",") if value.strip()
         }
         invalid_books = selected_books - current_settings.allowed_books_set
         if invalid_books:
-            raise HTTPException(status_code=403, detail="Una o más criptomonedas no están autorizadas.")
+            raise HTTPException(
+                status_code=403, detail="Una o más criptomonedas no están autorizadas."
+            )
 
         try:
             start_at, end_at, period_label = resolve_period_range(
@@ -261,7 +299,9 @@ def create_app(
     @application.get("/api/positions")
     async def positions(request: Request, response: Response):
         require_auth(request)
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Cache-Control"] = (
+            "no-store, no-cache, must-revalidate, max-age=0"
+        )
         response.headers["Pragma"] = "no-cache"
 
         with session_factory() as db_session:

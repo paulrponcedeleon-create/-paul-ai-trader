@@ -1,3 +1,9 @@
+import pytest
+
+pytest.importorskip("fastapi")
+
+pytestmark = pytest.mark.api
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 

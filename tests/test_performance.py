@@ -1,3 +1,9 @@
+import pytest
+
+pytest.importorskip("sqlalchemy")
+
+pytestmark = pytest.mark.database
+
 from datetime import datetime, timezone
 
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository

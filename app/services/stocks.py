@@ -41,13 +41,23 @@ class StockQuoteClient:
         result = data["chart"]["result"][0]
         meta = result["meta"]
         quote_rows = result.get("indicators", {}).get("quote", [{}])[0]
-        highs = [float(value) for value in quote_rows.get("high", []) if value is not None]
-        lows = [float(value) for value in quote_rows.get("low", []) if value is not None]
-        volumes = [float(value) for value in quote_rows.get("volume", []) if value is not None]
+        highs = [
+            float(value) for value in quote_rows.get("high", []) if value is not None
+        ]
+        lows = [
+            float(value) for value in quote_rows.get("low", []) if value is not None
+        ]
+        volumes = [
+            float(value) for value in quote_rows.get("volume", []) if value is not None
+        ]
         last = float(meta.get("regularMarketPrice") or meta.get("previousClose"))
-        high = float(meta.get("regularMarketDayHigh") or (max(highs) if highs else last))
+        high = float(
+            meta.get("regularMarketDayHigh") or (max(highs) if highs else last)
+        )
         low = float(meta.get("regularMarketDayLow") or (min(lows) if lows else last))
-        previous_close = float(meta.get("chartPreviousClose") or meta.get("previousClose") or last)
+        previous_close = float(
+            meta.get("chartPreviousClose") or meta.get("previousClose") or last
+        )
         return {
             "symbol": symbol,
             "last": last,

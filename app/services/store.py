@@ -2,14 +2,11 @@ from typing import Any, Protocol
 
 
 class SimulationRepository(Protocol):
-    def list(self, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-        ...
+    def list(self, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]: ...
 
-    def count(self) -> int:
-        ...
+    def count(self) -> int: ...
 
-    def add(self, item: dict[str, Any]) -> dict[str, Any]:
-        ...
+    def add(self, item: dict[str, Any]) -> dict[str, Any]: ...
 
 
 HISTORY_PAGE_SIZE = 5
@@ -36,5 +33,7 @@ def list_simulations(
     }
 
 
-def add_simulation(item: dict[str, Any], repository: SimulationRepository) -> dict[str, Any]:
+def add_simulation(
+    item: dict[str, Any], repository: SimulationRepository
+) -> dict[str, Any]:
     return repository.add(item)
