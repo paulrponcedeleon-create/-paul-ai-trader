@@ -32,7 +32,7 @@
     const book = card.dataset.book;
     const symbol = card.querySelector(".market-symbol")?.textContent?.trim() || book.toUpperCase();
     const name = card.querySelector(".market-card-head small")?.textContent?.trim() || symbol;
-    const assetType = ["algn_mxn", "pstg_mxn", "tsla_mxn", "aapl_mxn"].includes(book)
+    const assetType = ["algn_mxn", "tsla_mxn", "aapl_mxn"].includes(book)
       ? "stock"
       : book === "mxn_cash" ? "cash" : "market";
     return [book, {book, symbol, name, asset_type: assetType, signal: {action: "hold"}}];

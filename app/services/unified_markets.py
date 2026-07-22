@@ -8,7 +8,7 @@ from typing import Any
 from app.services.bitso import BitsoClient, BitsoError
 from app.services.rfq_quotes import RfqQuoteError, RfqQuoteResolver
 from app.services.stocks import StockQuoteClient, StockQuoteError
-from app.services.strategy import momentum_signal
+from app.services.signals import momentum_signal
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class AssetDefinition:
     asset_type: str
     stock_symbol: str | None = None
     tradeable: bool = True
+    unavailable_reason: str | None = None
 
 
 CURATED_ASSETS = (
@@ -32,7 +33,15 @@ CURATED_ASSETS = (
     AssetDefinition("paxg_mxn", "PAXG", "PAX Gold", "crypto"),
     AssetDefinition("xrp_mxn", "XRP", "XRP", "crypto"),
     AssetDefinition("algn_mxn", "ALGN", "Align Technology", "stock", "ALGN"),
-    AssetDefinition("pstg_mxn", "PSTG", "Everpure, Inc.", "stock", "PSTG"),
+    AssetDefinition(
+        "pstg_mxn",
+        "PSTG",
+        "Everpure, Inc. (PSTG no disponible)",
+        "stock",
+        None,
+        False,
+        "PSTG ya no está disponible en proveedores públicos; no se asigna ticker sustituto.",
+    ),
     AssetDefinition("tsla_mxn", "TSLA", "Tesla", "stock", "TSLA"),
     AssetDefinition("aapl_mxn", "AAPL", "Apple", "stock", "AAPL"),
 )
@@ -134,7 +143,9 @@ class UnifiedMarketService:
             [f"{major}_usd", "usdc_mxn"],
             [f"{major}_btc", "btc_mxn"],
         ]
-        valid = [route for route in candidates if all(leg in available for leg in route)]
+        valid = [
+            route for route in candidates if all(leg in available for leg in route)
+        ]
         if not valid:
             raise UnifiedMarketError(
                 f"Bitso no tiene libro Alpha ni conversión disponible para {major.upper()}."
@@ -215,6 +226,11 @@ class UnifiedMarketService:
         raise UnifiedMarketError("No se encontró una referencia USD/MXN en Bitso.")
 
     async def _stock_quote(self, asset: AssetDefinition) -> dict[str, Any]:
+        if not asset.stock_symbol:
+            raise UnifiedMarketError(
+                asset.unavailable_reason
+                or f"{asset.symbol} no tiene símbolo público disponible."
+            )
         try:
             stock, (mxn_per_usd, fx_book) = await asyncio.gather(
                 self.stocks.quote(str(asset.stock_symbol)),
@@ -238,7 +254,7 @@ class UnifiedMarketService:
             "route": [f"{asset.stock_symbol}_USD", fx_book],
             "route_label": f"{asset.stock_symbol}/USD → {fx_book.upper()}",
             "source": str(stock.get("source") or "external_stock_reference"),
-            "tradeable": True,
+            "tradeable": asset.tradeable,
             "delayed": bool(stock.get("delayed", False)),
         }
 

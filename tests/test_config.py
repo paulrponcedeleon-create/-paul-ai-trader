@@ -1,4 +1,10 @@
 import pytest
+
+pytest.importorskip("pydantic")
+pytest.importorskip("pydantic_settings")
+
+pytestmark = pytest.mark.integration
+
 from pydantic import ValidationError
 
 from app.config import (

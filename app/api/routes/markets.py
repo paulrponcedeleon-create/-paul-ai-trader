@@ -11,7 +11,7 @@ from app.services.bitso import BitsoError
 from app.services.portfolio import calculate_position, summarize_positions
 from app.services.risk import validate_order
 from app.services.store import add_simulation
-from app.services.strategy import momentum_signal
+from app.services.signals import momentum_signal
 from app.services.unified_markets import UnifiedMarketError, UnifiedMarketService
 
 router = APIRouter(tags=["markets"])
@@ -27,7 +27,9 @@ def _market_service(request: Request) -> UnifiedMarketService:
 
 
 @router.get("/markets")
-async def markets(request: Request, response: Response, force: bool = Query(default=False)):
+async def markets(
+    request: Request, response: Response, force: bool = Query(default=False)
+):
     require_auth(request)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -75,15 +77,22 @@ async def market(book: str, request: Request, response: Response):
     if quote["asset_type"] == "cash":
         reason, confidence = "Efectivo disponible; no tiene movimiento de mercado.", 100
     elif quote["source"] == "bitso_rfq":
-        reason, confidence = "Conversión disponible en Bitso App; no hay rango Alpha de 24 h comparable.", 50
+        reason, confidence = (
+            "Conversión disponible en Bitso App; no hay rango Alpha de 24 h comparable.",
+            50,
+        )
     else:
         reason, confidence = signal.reason, signal.confidence
-    signal_payload = signal.__dict__ if signal is not None else {
-        "action": "hold",
-        "confidence": confidence,
-        "reason": reason,
-        "reference_price": float(quote["last"]),
-    }
+    signal_payload = (
+        signal.__dict__
+        if signal is not None
+        else {
+            "action": "hold",
+            "confidence": confidence,
+            "reason": reason,
+            "reference_price": float(quote["last"]),
+        }
+    )
     return {
         "book": book,
         "ticker": quote,
@@ -118,16 +127,18 @@ async def positions(request: Request, response: Response):
             float(quote["last"]),
             exit_fee_rate=float(quote["effective_fee_rate"]),
         )
-        calculated.update({
-            "symbol": quote["symbol"],
-            "name": quote["name"],
-            "asset_type": quote["asset_type"],
-            "route": quote["route"],
-            "route_label": quote.get("route_label"),
-            "quote_source": quote["source"],
-            "fee_included_in_quote": quote.get("fee_included_in_quote", False),
-            "delayed": quote["delayed"],
-        })
+        calculated.update(
+            {
+                "symbol": quote["symbol"],
+                "name": quote["name"],
+                "asset_type": quote["asset_type"],
+                "route": quote["route"],
+                "route_label": quote.get("route_label"),
+                "quote_source": quote["source"],
+                "fee_included_in_quote": quote.get("fee_included_in_quote", False),
+                "delayed": quote["delayed"],
+            }
+        )
         items.append(calculated)
 
     summary = summarize_positions(items)
@@ -141,7 +152,9 @@ async def positions(request: Request, response: Response):
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "refresh_seconds": 5,
         "fees_included": True,
-        "fee_source": "mixed" if len(fee_sources) > 1 else next(iter(fee_sources), "none"),
+        "fee_source": "mixed"
+        if len(fee_sources) > 1
+        else next(iter(fee_sources), "none"),
     }
 
 
@@ -153,14 +166,20 @@ async def close_simulation(simulation_id: str, request: Request):
         repository = SqlSimulatedOrderRepository(db_session)
         open_order = repository.get_open(simulation_id)
     if open_order is None:
-        raise HTTPException(status_code=404, detail="La posición no existe o ya fue cerrada.")
+        raise HTTPException(
+            status_code=404, detail="La posición no existe o ya fue cerrada."
+        )
     try:
-        quote = await _market_service(request).quote(str(open_order["book"]), force=True, side="sell")
+        quote = await _market_service(request).quote(
+            str(open_order["book"]), force=True, side="sell"
+        )
     except (UnifiedMarketError, BitsoError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     exit_fee_rate = float(quote["effective_fee_rate"])
     close_price = float(quote["last"])
-    calculated = calculate_position(open_order, close_price, exit_fee_rate=exit_fee_rate)
+    calculated = calculate_position(
+        open_order, close_price, exit_fee_rate=exit_fee_rate
+    )
     closed_at = datetime.now(timezone.utc)
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
@@ -225,7 +244,9 @@ async def order(body: SimulatedOrderRequest, request: Request):
     except (UnifiedMarketError, BitsoError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     if not quote["tradeable"]:
-        raise HTTPException(status_code=403, detail="Este activo es informativo y no abre posiciones.")
+        raise HTTPException(
+            status_code=403, detail="Este activo es informativo y no abre posiciones."
+        )
 
     if settings.live_trading:
         if quote["asset_type"] != "crypto" or quote["route"] != [book]:
@@ -234,7 +255,9 @@ async def order(body: SimulatedOrderRequest, request: Request):
                 detail="El modo real solo permite libros cripto autorizados directamente contra MXN.",
             )
         try:
-            result = await request.app.state.bitso.place_market_order(book, body.side, body.amount_mxn)
+            result = await request.app.state.bitso.place_market_order(
+                book, body.side, body.amount_mxn
+            )
         except BitsoError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"status": "submitted", "risk_check": decision.reason, "bitso": result}

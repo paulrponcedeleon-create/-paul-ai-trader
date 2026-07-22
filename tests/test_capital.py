@@ -1,3 +1,9 @@
+import pytest
+
+pytest.importorskip("sqlalchemy")
+
+pytestmark = pytest.mark.database
+
 from datetime import datetime, timezone
 
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
@@ -13,18 +19,20 @@ def test_capital_endpoint_and_order_balance(client):
     session_factory = client.app.state.db_session_factory
     with session_factory() as session:
         repository = SqlSimulatedOrderRepository(session)
-        repository.add({
-            "id": "large-open-position",
-            "created_at": datetime.now(timezone.utc),
-            "status": "open",
-            "book": "btc_mxn",
-            "side": "buy",
-            "amount_mxn": 900.0,
-            "reference_price": 100.0,
-            "entry_fee_rate": 0.0,
-            "entry_fee_mxn": 0.0,
-            "risk_check": "ok",
-        })
+        repository.add(
+            {
+                "id": "large-open-position",
+                "created_at": datetime.now(timezone.utc),
+                "status": "open",
+                "book": "btc_mxn",
+                "side": "buy",
+                "amount_mxn": 900.0,
+                "reference_price": 100.0,
+                "entry_fee_rate": 0.0,
+                "entry_fee_mxn": 0.0,
+                "risk_check": "ok",
+            }
+        )
         session.commit()
 
     capital_after = client.get("/api/capital").json()
@@ -53,18 +61,20 @@ def test_closed_result_returns_principal_and_applies_realized_pnl(client):
     session_factory = client.app.state.db_session_factory
     with session_factory() as session:
         repository = SqlSimulatedOrderRepository(session)
-        repository.add({
-            "id": "capital-close",
-            "created_at": datetime.now(timezone.utc),
-            "status": "open",
-            "book": "btc_mxn",
-            "side": "buy",
-            "amount_mxn": 100.0,
-            "reference_price": 100.0,
-            "entry_fee_rate": 0.0,
-            "entry_fee_mxn": 0.0,
-            "risk_check": "ok",
-        })
+        repository.add(
+            {
+                "id": "capital-close",
+                "created_at": datetime.now(timezone.utc),
+                "status": "open",
+                "book": "btc_mxn",
+                "side": "buy",
+                "amount_mxn": 100.0,
+                "reference_price": 100.0,
+                "entry_fee_rate": 0.0,
+                "entry_fee_mxn": 0.0,
+                "risk_check": "ok",
+            }
+        )
         session.commit()
         before = repository.capital_ledger(1000.0)
         assert before["available_cash_mxn"] == 900.0

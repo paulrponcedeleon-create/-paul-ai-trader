@@ -25,7 +25,6 @@ def test_dashboard_renders_fixed_asset_order_filters_and_new_assets(client):
         ">PAXG<",
         ">XRP<",
         ">ALGN<",
-        ">PSTG<",
         ">TSLA<",
         ">AAPL<",
     ]

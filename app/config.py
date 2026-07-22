@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 from pydantic import model_validator
@@ -12,7 +13,7 @@ EXAMPLE_APP_PASSWORD = "replace-with-a-local-password"
 EXAMPLE_SESSION_SECRET = "replace-with-a-random-string-of-at-least-32-characters"
 DEFAULT_SIMULATION_BOOKS = (
     "btc_mxn,eth_mxn,sol_mxn,atom_mxn,xrp_mxn,paxg_mxn,"
-    "usdc_mxn,usdt_mxn,mxn_cash,algn_mxn,pstg_mxn,tsla_mxn,aapl_mxn"
+    "usdc_mxn,usdt_mxn,mxn_cash,algn_mxn,tsla_mxn,aapl_mxn"
 )
 
 
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
     bitso_api_secret: str = ""
 
     database_url: str = "sqlite:///./paul_ai_trader.db"
+    paul_data_dir: str = "./data"
 
     live_trading: bool = False
     simulated_initial_capital_mxn: float = 1000.0
@@ -39,6 +41,24 @@ class Settings(BaseSettings):
     max_open_orders: int = 3
     allowed_books: str = "btc_mxn,eth_mxn,xrp_mxn,sol_mxn"
     simulation_books: str = DEFAULT_SIMULATION_BOOKS
+
+    system_heartbeat_seconds: int = 60
+    system_retry_attempts: int = 3
+    system_circuit_breaker_failures: int = 3
+    system_snapshot_interval_seconds: int = 300
+    system_event_retention: int = 1000
+
+    runtime_loop_interval_seconds: float = 5.0
+    runtime_books: str = "btc_mxn"
+    runtime_timeframe: str = "1m"
+    runtime_strategy: str = "momentum"
+    runtime_trade_amount_mxn: float = 100.0
+    runtime_market_data_provider: str = "mock"
+    runtime_broker: str = "paper"
+
+    burnin_default_duration: str = "1h"
+    burnin_memory_growth_alert_bytes: int = 26214400
+    burnin_max_events: int = 1000
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -77,6 +97,10 @@ class Settings(BaseSettings):
     def enabled_books_set(self) -> set[str]:
         return self.allowed_books_set
 
+    @property
+    def resolved_paul_data_dir(self) -> Path:
+        return Path(self.paul_data_dir).expanduser().resolve()
+
     @model_validator(mode="after")
     def validate_security_configuration(self) -> "Settings":
         if self.session_max_age_seconds <= 0:
@@ -84,7 +108,10 @@ class Settings(BaseSettings):
         if self.simulated_initial_capital_mxn <= 0:
             raise ValueError("SIMULATED_INITIAL_CAPITAL_MXN debe ser mayor que cero.")
 
-        if self.session_cookie_samesite == "none" and not self.resolved_session_cookie_secure:
+        if (
+            self.session_cookie_samesite == "none"
+            and not self.resolved_session_cookie_secure
+        ):
             raise ValueError("SameSite=None requiere SESSION_COOKIE_SECURE=true.")
 
         database_url = self.database_url.strip()
@@ -99,7 +126,8 @@ class Settings(BaseSettings):
         if self.is_production:
             insecure_session_secret = (
                 len(self.session_secret) < 32
-                or self.session_secret in {DEVELOPMENT_SESSION_SECRET, EXAMPLE_SESSION_SECRET}
+                or self.session_secret
+                in {DEVELOPMENT_SESSION_SECRET, EXAMPLE_SESSION_SECRET}
                 or "replace-with" in self.session_secret.lower()
                 or "change-this" in self.session_secret.lower()
             )
@@ -112,9 +140,13 @@ class Settings(BaseSettings):
                 or self.app_password in {DEVELOPMENT_APP_PASSWORD, EXAMPLE_APP_PASSWORD}
                 or "replace-with" in self.app_password.lower()
             ):
-                raise ValueError("APP_PASSWORD debe configurarse explícitamente en producción.")
+                raise ValueError(
+                    "APP_PASSWORD debe configurarse explícitamente en producción."
+                )
             if not self.resolved_session_cookie_secure:
-                raise ValueError("Las cookies de sesión deben ser seguras en producción.")
+                raise ValueError(
+                    "Las cookies de sesión deben ser seguras en producción."
+                )
             if database_url.lower().startswith("sqlite"):
                 raise ValueError(
                     "DATABASE_URL debe apuntar a PostgreSQL en producción; SQLite no es persistente en Render."
