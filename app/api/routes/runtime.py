@@ -10,6 +10,14 @@ from app.runtime import RuntimeConfig, RuntimeEngine
 
 router = APIRouter(tags=["runtime"])
 
+VERIFIED_RUNTIME_BOOKS = (
+    "btc_mxn",
+    "eth_mxn",
+    "sol_mxn",
+    "xrp_mxn",
+    "usdt_mxn",
+)
+
 
 @router.post("/runtime/start")
 async def runtime_start(request: Request):
@@ -75,23 +83,30 @@ def _ensure_background_loop(request: Request, runtime: RuntimeEngine) -> None:
         )
 
 
+def _resolved_runtime_books(settings) -> tuple[str, ...]:
+    configured = tuple(
+        book.strip().lower()
+        for book in getattr(
+            settings,
+            "runtime_books",
+            ",".join(VERIFIED_RUNTIME_BOOKS),
+        ).split(",")
+        if book.strip()
+    )
+    verified = tuple(book for book in configured if book in VERIFIED_RUNTIME_BOOKS)
+    return verified or VERIFIED_RUNTIME_BOOKS
+
+
 def _runtime(request: Request) -> RuntimeEngine:
     runtime = getattr(request.app.state, "runtime_engine", None)
     if runtime is None:
         settings = request.app.state.settings
-        books = tuple(
-            getattr(
-                settings,
-                "runtime_books",
-                "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn",
-            ).split(",")
-        )
         runtime = RuntimeEngine(
             config=RuntimeConfig(
                 loop_interval_seconds=float(
                     getattr(settings, "runtime_loop_interval_seconds", 60.0)
                 ),
-                books=tuple(book.strip().lower() for book in books if book.strip()),
+                books=_resolved_runtime_books(settings),
                 timeframe=getattr(settings, "runtime_timeframe", "1m"),
                 strategy_name=getattr(settings, "runtime_strategy", "momentum"),
                 trade_amount_mxn=Decimal(
