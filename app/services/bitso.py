@@ -34,7 +34,11 @@ class BitsoClient:
         if not self.settings.bitso_api_key or not self.settings.bitso_api_secret:
             raise BitsoError("Faltan las credenciales privadas de Bitso.")
         nonce = str(time.time_ns())
-        body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False) if payload else ""
+        body = (
+            json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+            if payload
+            else ""
+        )
         message = f"{nonce}{method.upper()}{path}{body}"
         signature = hmac.new(
             self.settings.bitso_api_secret.encode("utf-8"),
@@ -100,7 +104,9 @@ class BitsoClient:
                 f"Bitso respondió HTTP {response.status_code} sin JSON válido."
             ) from exc
 
-        if response.is_error or (isinstance(data, dict) and data.get("success") is False):
+        if response.is_error or (
+            isinstance(data, dict) and data.get("success") is False
+        ):
             raise BitsoError(self._error_message(data, response.status_code))
         return data
 

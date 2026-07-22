@@ -2,11 +2,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
-
-from app.config import Settings
-from app.main import create_app
-from app.services.unified_markets import UnifiedMarketService
 
 
 class FakeBitsoClient:
@@ -196,7 +191,11 @@ class FakeStockQuoteClient:
 
 
 @pytest.fixture
-def test_settings() -> Settings:
+def test_settings():
+    pytest.importorskip("pydantic")
+    pytest.importorskip("pydantic_settings")
+    from app.config import Settings
+
     return Settings(
         _env_file=None,
         app_env="test",
@@ -219,11 +218,16 @@ def fake_stocks() -> FakeStockQuoteClient:
 
 @pytest.fixture
 def client(
-    test_settings: Settings,
+    test_settings,
     fake_bitso: FakeBitsoClient,
     fake_stocks: FakeStockQuoteClient,
     tmp_path: Path,
 ):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.services.unified_markets import UnifiedMarketService
+
     test_settings.database_url = f"sqlite:///{tmp_path / 'simulations.db'}"
     application = create_app(test_settings, fake_bitso)
     application.state.unified_markets = UnifiedMarketService(fake_bitso, fake_stocks)

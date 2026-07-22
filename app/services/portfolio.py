@@ -53,9 +53,11 @@ def calculate_position(
         gross_pnl = asset_quantity * (entry_price - market_price)
         estimated_exit_fee = asset_quantity * market_price * current_exit_rate
         current_value = amount + gross_pnl - entry_fee_mxn - estimated_exit_fee
-        break_even_price = entry_price * (
-            Decimal("1") - entry_rate
-        ) / (Decimal("1") + current_exit_rate)
+        break_even_price = (
+            entry_price
+            * (Decimal("1") - entry_rate)
+            / (Decimal("1") + current_exit_rate)
+        )
 
     pnl = current_value - amount
     return_pct = (pnl / amount) * Decimal("100") if amount else Decimal("0")
@@ -69,16 +71,28 @@ def calculate_position(
         **order,
         "entry_price": float(entry_price),
         "current_price": float(market_price),
-        "asset_quantity": float(asset_quantity.quantize(QUANTITY, rounding=ROUND_HALF_UP)),
-        "gross_current_value_mxn": _money(gross_current_value if order["side"] == "buy" else current_value + estimated_exit_fee),
+        "asset_quantity": float(
+            asset_quantity.quantize(QUANTITY, rounding=ROUND_HALF_UP)
+        ),
+        "gross_current_value_mxn": _money(
+            gross_current_value
+            if order["side"] == "buy"
+            else current_value + estimated_exit_fee
+        ),
         "current_value_mxn": _money(current_value),
         "unrealized_pnl_mxn": _money(pnl),
         "return_pct": float(return_pct.quantize(PERCENT, rounding=ROUND_HALF_UP)),
         "entry_fee_rate": float(entry_rate),
-        "entry_fee_percent": float((entry_rate * Decimal("100")).quantize(PERCENT, rounding=ROUND_HALF_UP)),
+        "entry_fee_percent": float(
+            (entry_rate * Decimal("100")).quantize(PERCENT, rounding=ROUND_HALF_UP)
+        ),
         "entry_fee_mxn": _money(entry_fee_mxn),
         "exit_fee_rate": float(current_exit_rate),
-        "exit_fee_percent": float((current_exit_rate * Decimal("100")).quantize(PERCENT, rounding=ROUND_HALF_UP)),
+        "exit_fee_percent": float(
+            (current_exit_rate * Decimal("100")).quantize(
+                PERCENT, rounding=ROUND_HALF_UP
+            )
+        ),
         "estimated_exit_fee_mxn": _money(estimated_exit_fee),
         "total_estimated_fees_mxn": _money(entry_fee_mxn + estimated_exit_fee),
         "break_even_price": float(break_even_price),

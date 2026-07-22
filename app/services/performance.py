@@ -71,8 +71,14 @@ def resolve_period_range(
         label = "Año actual"
 
     start_local = datetime.combine(first_day, time.min, tzinfo=local_zone)
-    end_local = datetime.combine(last_day + timedelta(days=1), time.min, tzinfo=local_zone)
-    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc), label
+    end_local = datetime.combine(
+        last_day + timedelta(days=1), time.min, tzinfo=local_zone
+    )
+    return (
+        start_local.astimezone(timezone.utc),
+        end_local.astimezone(timezone.utc),
+        label,
+    )
 
 
 def summarize_closed_orders(
@@ -166,7 +172,9 @@ def summarize_closed_orders(
                 "gross_pnl_mxn": _money(gross),
                 "fees_mxn": _money(fees),
                 "net_pnl_mxn": _money(realized),
-                "return_pct": _percent((realized / amount) * Decimal("100")) if amount else 0.0,
+                "return_pct": _percent((realized / amount) * Decimal("100"))
+                if amount
+                else 0.0,
             }
         )
 
@@ -179,9 +187,7 @@ def summarize_closed_orders(
         else Decimal("0")
     )
     return_pct = (
-        net_pnl / total_invested * Decimal("100")
-        if total_invested
-        else Decimal("0")
+        net_pnl / total_invested * Decimal("100") if total_invested else Decimal("0")
     )
 
     daily_rows = []
@@ -198,7 +204,9 @@ def summarize_closed_orders(
                 "gross_pnl_mxn": _money(row["gross_pnl_mxn"]),
                 "fees_mxn": _money(row["fees_mxn"]),
                 "net_pnl_mxn": _money(row["net_pnl_mxn"]),
-                "return_pct": _percent((row["net_pnl_mxn"] / invested) * Decimal("100")) if invested else 0.0,
+                "return_pct": _percent((row["net_pnl_mxn"] / invested) * Decimal("100"))
+                if invested
+                else 0.0,
                 "cumulative_net_pnl_mxn": _money(cumulative),
             }
         )
@@ -217,7 +225,9 @@ def summarize_closed_orders(
                 "gross_pnl_mxn": _money(row["gross_pnl_mxn"]),
                 "fees_mxn": _money(row["fees_mxn"]),
                 "net_pnl_mxn": _money(row["net_pnl_mxn"]),
-                "return_pct": _percent((row["net_pnl_mxn"] / invested) * Decimal("100")) if invested else 0.0,
+                "return_pct": _percent((row["net_pnl_mxn"] / invested) * Decimal("100"))
+                if invested
+                else 0.0,
             }
         )
 
@@ -235,8 +245,12 @@ def summarize_closed_orders(
             "return_pct": _percent(return_pct),
             "best_trade_mxn": _money(max(wins + losses)) if wins or losses else 0.0,
             "worst_trade_mxn": _money(min(wins + losses)) if wins or losses else 0.0,
-            "average_win_mxn": _money(sum(wins, Decimal("0")) / len(wins)) if wins else 0.0,
-            "average_loss_mxn": _money(sum(losses, Decimal("0")) / len(losses)) if losses else 0.0,
+            "average_win_mxn": _money(sum(wins, Decimal("0")) / len(wins))
+            if wins
+            else 0.0,
+            "average_loss_mxn": _money(sum(losses, Decimal("0")) / len(losses))
+            if losses
+            else 0.0,
         },
         "daily": daily_rows,
         "by_book": book_rows,

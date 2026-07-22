@@ -48,7 +48,9 @@ class RfqQuoteResolver:
         for intermediate in self.INTERMEDIATES:
             if (start, intermediate) in pairs and (intermediate, end) in pairs:
                 return [(start, intermediate), (intermediate, end)]
-        raise RfqQuoteError(f"Bitso no devolvió una ruta de conversión {start} → {end}.")
+        raise RfqQuoteError(
+            f"Bitso no devolvió una ruta de conversión {start} → {end}."
+        )
 
     @staticmethod
     def _payload(result: dict[str, Any]) -> dict[str, Any]:
@@ -70,7 +72,9 @@ class RfqQuoteResolver:
                 payload = self._payload(result)
                 amount = float(payload["target_amount"])
                 if amount <= 0:
-                    raise RfqQuoteError("Bitso devolvió una cantidad de conversión inválida.")
+                    raise RfqQuoteError(
+                        "Bitso devolvió una cantidad de conversión inválida."
+                    )
             price_mxn = self.REFERENCE_MXN / amount
         else:
             amount = self.REFERENCE_MXN
@@ -83,7 +87,9 @@ class RfqQuoteResolver:
                 payload = self._payload(result)
                 amount = float(payload["source_amount"])
                 if amount <= 0:
-                    raise RfqQuoteError("Bitso devolvió una cantidad de conversión inválida.")
+                    raise RfqQuoteError(
+                        "Bitso devolvió una cantidad de conversión inválida."
+                    )
             price_mxn = self.REFERENCE_MXN / amount
 
         if price_mxn <= 0:
@@ -99,7 +105,9 @@ class RfqQuoteResolver:
             "effective_fee_percent": 0.0,
             "fee_source": "bitso_rfq_inclusive",
             "fee_included_in_quote": True,
-            "route": [f"rfq:{source.lower()}_{target.lower()}" for source, target in route],
+            "route": [
+                f"rfq:{source.lower()}_{target.lower()}" for source, target in route
+            ],
             "route_label": f"Conversión Bitso App · {route_text}",
             "source": "bitso_rfq",
             "delayed": False,

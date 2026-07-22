@@ -22,7 +22,9 @@ def build_engine(settings: Settings) -> Engine:
 
 
 def build_session_factory(engine: Engine) -> sessionmaker[Session]:
-    return sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    return sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
 
 
 def session_scope(session_factory: sessionmaker[Session]) -> Iterator[Session]:
