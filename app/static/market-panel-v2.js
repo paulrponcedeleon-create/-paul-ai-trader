@@ -5,10 +5,11 @@
   if (!grid) return;
 
   const actionLabels = {buy: 'COMPRAR', hold: 'MANTENER', sell: 'VENDER SI TIENES'};
-  const CACHE_KEY = 'paul-market-card-cache-v4';
+  const CACHE_KEY = 'paul-market-card-cache-v5';
   const REQUEST_TIMEOUT_MS = 15000;
   const CRYPTO_REFRESH_MS = 15000;
   const STOCK_REFRESH_MS = 60000;
+  const rfqBooks = new Set(['atom_mxn', 'paxg_mxn', 'usdc_mxn']);
   let typeFilter = 'all';
   let signalFilter = 'all';
 
@@ -78,8 +79,8 @@
     const actionElement = card.querySelector('.market-action');
     const priceElement = card.querySelector('.market-price');
     const smalls = card.querySelectorAll(':scope > small');
-    if (actionElement) actionElement.textContent = item.error && item.last === undefined ? 'NO DISPONIBLE' : (actionLabels[action] || 'MANTENER');
-    if (priceElement) priceElement.textContent = item.last !== undefined ? money(item.last) : (item.loading ? 'Actualizando…' : 'Proveedor no disponible');
+    if (actionElement) actionElement.textContent = item.error && item.last === undefined ? 'REINTENTANDO' : (actionLabels[action] || 'MANTENER');
+    if (priceElement) priceElement.textContent = item.last !== undefined ? money(item.last) : (item.loading ? 'Actualizando…' : 'Esperando precio');
     if (smalls[0]) smalls[0].textContent = item.last !== undefined ? feeLabel(item) : 'Se reintentará automáticamente';
     if (smalls[1]) smalls[1].textContent = routeLabel(item);
     if (smalls[2]) smalls[2].textContent = elapsed(item.updatedAt);
@@ -101,7 +102,11 @@
     const ready = values.filter(item => item.last !== undefined).length;
     const loading = values.filter(item => item.loading).length;
     const unavailable = values.filter(item => item.error && item.last === undefined).length;
-    status.textContent = `${ready} con precio · ${loading} actualizando · ${unavailable} no disponibles · refresco automático`;
+    status.textContent = `${ready} con precio · ${loading} actualizando · ${unavailable} pendientes · refresco automático`;
+  }
+
+  function endpointFor(book) {
+    return rfqBooks.has(book) ? `/market/rfq/${book}` : `/api/market/${book}`;
   }
 
   async function loadBook(book) {
@@ -115,7 +120,7 @@
     updateCard(book);
     updateStatus();
     try {
-      const response = await fetch(`/api/market/${book}?ts=${Date.now()}`, {cache: 'no-store', signal: controller.signal});
+      const response = await fetch(`${endpointFor(book)}?ts=${Date.now()}`, {cache: 'no-store', signal: controller.signal});
       const data = await response.json().catch(() => ({detail: 'Respuesta inválida'}));
       if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
       const ticker = data.ticker || {};
@@ -134,7 +139,7 @@
 
   function refreshByType(type) {
     [...catalog.values()].filter(item => item.asset_type === type).forEach((item, index) => {
-      window.setTimeout(() => loadBook(item.book), index * 350);
+      window.setTimeout(() => loadBook(item.book), index * 250);
     });
   }
 
