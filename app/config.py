@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     runtime_trade_amount_mxn: float = 100.0
     runtime_market_data_provider: str = "bitso"
     runtime_broker: str = "paper"
+    runtime_history_points: int = 200
+
+    paper_stop_loss_pct: float = 3.0
+    paper_take_profit_pct: float = 6.0
+    paper_trailing_stop_pct: float = 2.0
 
     burnin_default_duration: str = "1h"
     burnin_memory_growth_alert_bytes: int = 26214400
@@ -110,6 +115,15 @@ class Settings(BaseSettings):
             raise ValueError("SIMULATED_INITIAL_CAPITAL_MXN debe ser mayor que cero.")
         if self.runtime_loop_interval_seconds < 5:
             raise ValueError("RUNTIME_LOOP_INTERVAL_SECONDS debe ser de al menos 5 segundos.")
+        if self.runtime_history_points < 20 or self.runtime_history_points > 500:
+            raise ValueError("RUNTIME_HISTORY_POINTS debe estar entre 20 y 500.")
+        for name, value in {
+            "PAPER_STOP_LOSS_PCT": self.paper_stop_loss_pct,
+            "PAPER_TAKE_PROFIT_PCT": self.paper_take_profit_pct,
+            "PAPER_TRAILING_STOP_PCT": self.paper_trailing_stop_pct,
+        }.items():
+            if value <= 0 or value > 50:
+                raise ValueError(f"{name} debe estar entre 0 y 50.")
         if self.runtime_broker != "paper" and not self.live_trading:
             raise ValueError("Con LIVE_TRADING=false, RUNTIME_BROKER debe permanecer en paper.")
 
