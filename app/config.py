@@ -48,12 +48,13 @@ class Settings(BaseSettings):
     system_snapshot_interval_seconds: int = 300
     system_event_retention: int = 1000
 
-    runtime_loop_interval_seconds: float = 5.0
-    runtime_books: str = "btc_mxn"
+    runtime_auto_start: bool = True
+    runtime_loop_interval_seconds: float = 60.0
+    runtime_books: str = "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn"
     runtime_timeframe: str = "1m"
     runtime_strategy: str = "momentum"
     runtime_trade_amount_mxn: float = 100.0
-    runtime_market_data_provider: str = "mock"
+    runtime_market_data_provider: str = "bitso"
     runtime_broker: str = "paper"
 
     burnin_default_duration: str = "1h"
@@ -107,6 +108,10 @@ class Settings(BaseSettings):
             raise ValueError("SESSION_MAX_AGE_SECONDS debe ser mayor que cero.")
         if self.simulated_initial_capital_mxn <= 0:
             raise ValueError("SIMULATED_INITIAL_CAPITAL_MXN debe ser mayor que cero.")
+        if self.runtime_loop_interval_seconds < 5:
+            raise ValueError("RUNTIME_LOOP_INTERVAL_SECONDS debe ser de al menos 5 segundos.")
+        if self.runtime_broker != "paper" and not self.live_trading:
+            raise ValueError("Con LIVE_TRADING=false, RUNTIME_BROKER debe permanecer en paper.")
 
         if (
             self.session_cookie_samesite == "none"
