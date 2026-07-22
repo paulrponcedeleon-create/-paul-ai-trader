@@ -27,8 +27,8 @@
     if (!data || typeof data !== 'object') return output;
     Object.entries(data).forEach(([key, value]) => {
       const label = prefix ? `${prefix} · ${key}` : key;
-      if (value && typeof value === 'object' && !Array.isArray(value) && output.length < 10) flatten(value, label, output);
-      else if (output.length < 10) output.push([label, value]);
+      if (value && typeof value === 'object' && !Array.isArray(value) && output.length < 12) flatten(value, label, output);
+      else if (output.length < 12) output.push([label, value]);
     });
     return output;
   }
@@ -70,7 +70,13 @@
     try {
       const response = await fetch(`${url}?ts=${Date.now()}`, {cache: 'no-store'});
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(friendlyError(response, data));
+      if (!response.ok) {
+        if (name === 'readiness' && data?.checks) {
+          render(target, data, null);
+          return data;
+        }
+        throw new Error(friendlyError(response, data));
+      }
       render(target, data, null);
       return data;
     } catch (error) {
@@ -92,12 +98,19 @@
     ]);
     loadModule('analytics');
 
+    const databaseOk = readiness?.checks?.database?.ok;
+    const missingTables = readiness?.checks?.required_tables?.missing || [];
+
     document.querySelector('#statusRuntime').textContent = summarize(runtime, 'No disponible');
     document.querySelector('#statusMarket').textContent = health ? 'Conectado' : 'Sin respuesta';
-    document.querySelector('#statusDatabase').textContent = readiness ? (readiness.ready === false ? 'Requiere atención' : 'Disponible') : 'Sin confirmar';
+    document.querySelector('#statusDatabase').textContent = databaseOk === true
+      ? 'Conectada'
+      : databaseOk === false
+        ? (missingTables.length ? 'Faltan tablas' : 'No disponible')
+        : 'Sin confirmar';
     setDot('#statusRuntimeDot', Boolean(runtime));
     setDot('#statusMarketDot', Boolean(health));
-    setDot('#statusDatabaseDot', Boolean(readiness && readiness.ready !== false));
+    setDot('#statusDatabaseDot', databaseOk === true);
     document.querySelector('#systemLastUpdated').textContent = new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
 
     const paperState = document.querySelector('#overviewPaperState');
