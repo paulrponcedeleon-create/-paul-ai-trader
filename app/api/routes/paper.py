@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from app.paper_trading import PaperTradingEngine, PaperTradingRequest, PortfolioManager
@@ -30,7 +30,6 @@ async def start_paper(body: PaperStartRequest, request: Request):
             portfolio=PortfolioManager(initial_cash_mxn=body.initial_cash_mxn),
             repository=PaperTradingRepository(session),
         )
-        request.app.state.paper_engine = engine
         status = engine.start(
             PaperTradingRequest(
                 account_id=body.account_id,
@@ -44,6 +43,10 @@ async def start_paper(body: PaperStartRequest, request: Request):
             )
         )
         session.commit()
+        # Keep a safe in-memory engine after persistence. The repository created
+        # above belongs to the request-scoped DB session and must not be reused.
+        engine.repository = None
+        request.app.state.paper_engine = engine
         return status.__dict__
 
 
@@ -90,5 +93,13 @@ async def paper_reset(request: Request):
 def _engine(request: Request) -> PaperTradingEngine:
     engine = getattr(request.app.state, "paper_engine", None)
     if engine is None:
-        raise HTTPException(status_code=404, detail="Paper trading no iniciado.")
+        settings = request.app.state.settings
+        engine = PaperTradingEngine(
+            portfolio=PortfolioManager(
+                initial_cash_mxn=float(
+                    getattr(settings, "simulated_initial_capital_mxn", 1000.0)
+                )
+            )
+        )
+        request.app.state.paper_engine = engine
     return engine

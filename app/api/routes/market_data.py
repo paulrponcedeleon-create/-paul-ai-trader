@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.market_data import (
     MarketDataCache,
@@ -9,8 +9,15 @@ from app.market_data import (
     WebSocketController,
 )
 from app.reporting.market_data_reports import market_data_quality_report
+from app.services.bitso import BitsoError
 
 router = APIRouter(tags=["market-data"])
+
+RFQ_BOOKS = {
+    "atom_mxn": "ATOM",
+    "paxg_mxn": "PAXG",
+    "usdc_mxn": "USDC",
+}
 
 
 @router.get("/market/live/status")
@@ -33,6 +40,70 @@ async def market_live_provider(request: Request):
 async def market_live_ticker(request: Request, book: str = Query("btc_mxn")):
     ticker = await _provider(request).get_ticker(book.lower())
     return ticker.to_public_dict()
+
+
+@router.get("/market/rfq/{book}")
+async def market_rfq_ticker(book: str, request: Request):
+    """Return a Bitso RFQ valuation for assets without a public MXN order book.
+
+    The quote is read-only and is used only in simulation. It never places an
+    order and does not enable LIVE_TRADING.
+    """
+    normalized = book.lower()
+    source = RFQ_BOOKS.get(normalized)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Activo RFQ no configurado.")
+
+    try:
+        result = await request.app.state.bitso.rfq_quote(
+            source=source,
+            target="MXN",
+            source_amount="1",
+        )
+    except BitsoError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    payload = result.get("payload", result)
+    if isinstance(payload, dict) and isinstance(payload.get("quote"), dict):
+        payload = payload["quote"]
+
+    candidates = (
+        payload.get("target_amount") if isinstance(payload, dict) else None,
+        payload.get("amount") if isinstance(payload, dict) else None,
+        payload.get("price") if isinstance(payload, dict) else None,
+        payload.get("rate") if isinstance(payload, dict) else None,
+    )
+    price = next((value for value in candidates if value not in (None, "")), None)
+    try:
+        last = float(price)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Bitso RFQ respondió sin un precio MXN reconocible.",
+        ) from exc
+    if last <= 0:
+        raise HTTPException(status_code=502, detail="Bitso RFQ devolvió un precio inválido.")
+
+    return {
+        "book": normalized,
+        "ticker": {
+            "book": normalized,
+            "last": last,
+            "high": last,
+            "low": last,
+            "volume": 0,
+            "source": "bitso_rfq",
+            "route_label": f"Bitso RFQ · {source} → MXN",
+            "fee_included_in_quote": True,
+        },
+        "signal": {
+            "action": "hold",
+            "score": 50,
+            "confidence": 0,
+            "reason": "Cotización RFQ disponible; faltan velas públicas para calcular señal.",
+        },
+        "warning": "Cotización educativa de Bitso RFQ; no ejecuta órdenes.",
+    }
 
 
 @router.get("/market/live/orderbook")
@@ -77,7 +148,7 @@ def _provider(request: Request) -> MarketDataProvider:
             settings=request.app.state.settings,
             bitso_client=getattr(request.app.state, "bitso", None),
             cache=_cache(request),
-        ).create("mock")
+        ).create("bitso")
         request.app.state.market_data_provider = provider
         request.app.state.market_data_ws = WebSocketController(provider)
     return provider
