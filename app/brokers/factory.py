@@ -14,7 +14,7 @@ class BrokerFactory:
     def create(self, name: str | None = None) -> BrokerInterface:
         selected = (name or self._default_name()).lower()
         if selected == "paper":
-            return PaperBroker()
+            return PaperBroker(settings=self.settings)
         if selected == "bitso":
             live_enabled = bool(getattr(self.settings, "live_trading", False))
             return BitsoBroker(live_enabled=live_enabled, settings=self.settings)
