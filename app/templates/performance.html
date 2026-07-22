@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/static/markets.css?v=20260720-4">
 </head>
 <body>
+  {% set performance_books = ['btc_mxn', 'eth_mxn', 'sol_mxn', 'xrp_mxn', 'usdt_mxn', 'algn_mxn', 'tsla_mxn', 'aapl_mxn'] %}
   <main class="shell">
     <header>
       <div>
@@ -71,17 +72,19 @@
           </label>
 
           <fieldset class="crypto-filter">
-            <legend>Activos</legend>
+            <legend>Activos activos</legend>
             <div class="filter-actions">
               <button type="button" class="text-button" id="selectAllBooks">Todos</button>
               <button type="button" class="text-button" id="clearBooks">Ninguno</button>
             </div>
             <div class="book-checks">
-              {% for book in allowed_books %}
+              {% for book in performance_books %}
+              {% if book in allowed_books %}
               <label class="book-check">
                 <input type="checkbox" name="performanceBook" value="{{ book }}" checked>
                 <span>{{ book|upper }}</span>
               </label>
+              {% endif %}
               {% endfor %}
             </div>
           </fieldset>
@@ -169,7 +172,7 @@
       </footer>
     </div>
   </main>
-  <script src="/static/performance.js?v=20260720-2"></script>
+  <script src="/static/performance.js?v=20260722-1"></script>
   <script src="/static/market-catalog.js?v=20260720-4"></script>
 </body>
 </html>

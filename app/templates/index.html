@@ -13,9 +13,7 @@
     ('btc_mxn', 'BTC', 'Bitcoin'),
     ('eth_mxn', 'ETH', 'Ether'),
     ('sol_mxn', 'SOL', 'Solana'),
-    ('atom_mxn', 'ATOM', 'Cosmos'),
     ('usdt_mxn', 'USDT', 'Tether'),
-    ('paxg_mxn', 'PAXG', 'PAX Gold'),
     ('xrp_mxn', 'XRP', 'XRP'),
     ('algn_mxn', 'ALGN', 'Align Technology'),
     ('tsla_mxn', 'TSLA', 'Tesla'),
@@ -67,7 +65,7 @@
 
   <script src="/static/app.js?v=20260720-8"></script>
   <script>window.marketBridge={getSelected:()=>selectedBook,select:book=>{selectedBook=book;const option=document.querySelector(`#orderBook option[value="${book}"]`);if(option)document.querySelector('#orderBook').value=book;return refreshMarket();},refresh:()=>refreshMarket()};</script>
-  <script src="/static/market-panel-v2.js?v=20260722-1"></script>
+  <script src="/static/market-panel-v2.js?v=20260722-3"></script>
   <script src="/static/dashboard-v2.js?v=20260722-2"></script>
   <script src="/static/capital-balance.js?v=20260721-1"></script>
 </body>

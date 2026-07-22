@@ -12,8 +12,8 @@ DEVELOPMENT_SESSION_SECRET = "development-only-change-this-session-secret"
 EXAMPLE_APP_PASSWORD = "replace-with-a-local-password"
 EXAMPLE_SESSION_SECRET = "replace-with-a-random-string-of-at-least-32-characters"
 DEFAULT_SIMULATION_BOOKS = (
-    "btc_mxn,eth_mxn,sol_mxn,atom_mxn,xrp_mxn,paxg_mxn,"
-    "usdt_mxn,mxn_cash,algn_mxn,pstg_mxn,tsla_mxn,aapl_mxn"
+    "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn,"
+    "algn_mxn,tsla_mxn,aapl_mxn"
 )
 
 
