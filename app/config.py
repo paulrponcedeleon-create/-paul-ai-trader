@@ -13,7 +13,6 @@ EXAMPLE_APP_PASSWORD = "replace-with-a-local-password"
 EXAMPLE_SESSION_SECRET = "replace-with-a-random-string-of-at-least-32-characters"
 DEFAULT_SIMULATION_BOOKS = (
     "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn,"
-    "doge_mxn,ada_mxn,avax_mxn,link_mxn,arb_mxn,"
     "algn_mxn,tsla_mxn,aapl_mxn"
 )
 
@@ -51,10 +50,7 @@ class Settings(BaseSettings):
 
     runtime_auto_start: bool = True
     runtime_loop_interval_seconds: float = 30.0
-    runtime_books: str = (
-        "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn,"
-        "doge_mxn,ada_mxn,avax_mxn,link_mxn,arb_mxn"
-    )
+    runtime_books: str = "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn"
     runtime_timeframe: str = "1m"
     runtime_strategy: str = "momentum"
     runtime_trade_amount_mxn: float = 50.0
