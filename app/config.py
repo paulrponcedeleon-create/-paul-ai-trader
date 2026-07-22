@@ -13,6 +13,7 @@ EXAMPLE_APP_PASSWORD = "replace-with-a-local-password"
 EXAMPLE_SESSION_SECRET = "replace-with-a-random-string-of-at-least-32-characters"
 DEFAULT_SIMULATION_BOOKS = (
     "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn,"
+    "doge_mxn,ada_mxn,avax_mxn,link_mxn,arb_mxn,"
     "algn_mxn,tsla_mxn,aapl_mxn"
 )
 
@@ -35,10 +36,10 @@ class Settings(BaseSettings):
     paul_data_dir: str = "./data"
 
     live_trading: bool = False
-    simulated_initial_capital_mxn: float = 1000.0
-    max_order_mxn: float = 200.0
-    max_daily_loss_mxn: float = 100.0
-    max_open_orders: int = 3
+    simulated_initial_capital_mxn: float = 5000.0
+    max_order_mxn: float = 500.0
+    max_daily_loss_mxn: float = 500.0
+    max_open_orders: int = 12
     allowed_books: str = "btc_mxn,eth_mxn,xrp_mxn,sol_mxn"
     simulation_books: str = DEFAULT_SIMULATION_BOOKS
 
@@ -49,11 +50,14 @@ class Settings(BaseSettings):
     system_event_retention: int = 1000
 
     runtime_auto_start: bool = True
-    runtime_loop_interval_seconds: float = 60.0
-    runtime_books: str = "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn"
+    runtime_loop_interval_seconds: float = 30.0
+    runtime_books: str = (
+        "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn,"
+        "doge_mxn,ada_mxn,avax_mxn,link_mxn,arb_mxn"
+    )
     runtime_timeframe: str = "1m"
     runtime_strategy: str = "momentum"
-    runtime_trade_amount_mxn: float = 100.0
+    runtime_trade_amount_mxn: float = 50.0
     runtime_market_data_provider: str = "bitso"
     runtime_broker: str = "paper"
     runtime_history_points: int = 200
@@ -127,10 +131,7 @@ class Settings(BaseSettings):
         if self.runtime_broker != "paper" and not self.live_trading:
             raise ValueError("Con LIVE_TRADING=false, RUNTIME_BROKER debe permanecer en paper.")
 
-        if (
-            self.session_cookie_samesite == "none"
-            and not self.resolved_session_cookie_secure
-        ):
+        if self.session_cookie_samesite == "none" and not self.resolved_session_cookie_secure:
             raise ValueError("SameSite=None requiere SESSION_COOKIE_SECURE=true.")
 
         database_url = self.database_url.strip()
@@ -145,8 +146,7 @@ class Settings(BaseSettings):
         if self.is_production:
             insecure_session_secret = (
                 len(self.session_secret) < 32
-                or self.session_secret
-                in {DEVELOPMENT_SESSION_SECRET, EXAMPLE_SESSION_SECRET}
+                or self.session_secret in {DEVELOPMENT_SESSION_SECRET, EXAMPLE_SESSION_SECRET}
                 or "replace-with" in self.session_secret.lower()
                 or "change-this" in self.session_secret.lower()
             )
