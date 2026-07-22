@@ -5,11 +5,11 @@
 
   const endpoints = {
     health: ['/health', '#healthModule'],
-    readiness: ['/readiness', '#readinessModule'],
+    readiness: ['/ready', '#readinessModule'],
     runtime: ['/runtime/status', '#runtimeModule'],
     system: ['/system/status', '#systemModule'],
-    paper: ['/paper-trading/status', '#paperModule'],
-    analytics: ['/analytics/status', '#analyticsModule'],
+    paper: ['/paper/status', '#paperModule'],
+    analytics: ['/analytics/performance', '#analyticsModule'],
     adaptive: ['/adaptive/status', '#strategiesModule'],
     validation: ['/validation/status', '#validationModule']
   };
@@ -33,16 +33,24 @@
     return output;
   }
 
+  function friendlyError(response, data) {
+    const detail = data?.detail || `HTTP ${response.status}`;
+    if (response.status === 404) return detail;
+    if (response.status === 401 || response.status === 403) return 'Sesión no autorizada. Vuelve a iniciar sesión.';
+    if (response.status >= 500) return `Servicio temporalmente no disponible: ${detail}`;
+    return detail;
+  }
+
   function render(target, data, error) {
     const node = document.querySelector(target);
     if (!node) return;
     if (error) {
-      node.innerHTML = `<p class="module-message">No disponible todavía: ${error}</p>`;
+      node.innerHTML = `<p class="module-message">${error}</p>`;
       return;
     }
     const rows = flatten(data);
     if (!rows.length) {
-      node.innerHTML = '<p class="module-message">El endpoint respondió, pero todavía no hay métricas para mostrar.</p>';
+      node.innerHTML = '<p class="module-message">Conectado. Todavía no hay operaciones suficientes para generar métricas.</p>';
       return;
     }
     node.innerHTML = rows.map(([label, value]) => `<div class="module-metric"><span>${label.replaceAll('_', ' ')}</span><strong>${text(value)}</strong></div>`).join('');
@@ -62,7 +70,7 @@
     try {
       const response = await fetch(`${url}?ts=${Date.now()}`, {cache: 'no-store'});
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      if (!response.ok) throw new Error(friendlyError(response, data));
       render(target, data, null);
       return data;
     } catch (error) {
@@ -73,6 +81,7 @@
 
   function summarize(data, fallback = 'Sin datos todavía') {
     if (!data || typeof data !== 'object') return fallback;
+    if ('running' in data) return data.running ? 'Ejecutándose' : (data.account_id === 'unconfigured' ? 'Listo para configurar' : 'Detenido');
     return text(data.status ?? data.state ?? data.mode ?? data.ready ?? fallback);
   }
 
@@ -85,16 +94,16 @@
 
     document.querySelector('#statusRuntime').textContent = summarize(runtime, 'No disponible');
     document.querySelector('#statusMarket').textContent = health ? 'Conectado' : 'Sin respuesta';
-    document.querySelector('#statusDatabase').textContent = readiness ? 'Disponible' : 'Sin confirmar';
+    document.querySelector('#statusDatabase').textContent = readiness ? (readiness.ready === false ? 'Requiere atención' : 'Disponible') : 'Sin confirmar';
     setDot('#statusRuntimeDot', Boolean(runtime));
     setDot('#statusMarketDot', Boolean(health));
-    setDot('#statusDatabaseDot', Boolean(readiness));
+    setDot('#statusDatabaseDot', Boolean(readiness && readiness.ready !== false));
     document.querySelector('#systemLastUpdated').textContent = new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
 
     const paperState = document.querySelector('#overviewPaperState');
     const paperDetail = document.querySelector('#overviewPaperDetail');
     if (paperState) paperState.textContent = summarize(paper, 'Sin iniciar');
-    if (paperDetail) paperDetail.textContent = paper ? 'El backend de simulación está disponible.' : 'El backend no respondió.';
+    if (paperDetail) paperDetail.textContent = paper ? (paper.running ? 'Motor de simulación ejecutándose.' : 'Motor conectado y listo para iniciar.') : 'No fue posible consultar el motor.';
     const strategyState = document.querySelector('#overviewStrategyState');
     if (strategyState) strategyState.textContent = summarize(adaptive, 'Sin estrategia publicada');
     const validationState = document.querySelector('#overviewValidationState');
@@ -114,7 +123,13 @@
     const button = event.target.closest('.module-refresh');
     if (!button) return;
     const endpoint = button.dataset.moduleEndpoint;
-    const match = Object.entries(endpoints).find(([, value]) => value[0] === endpoint);
+    const aliases = {
+      '/readiness': '/ready',
+      '/paper-trading/status': '/paper/status',
+      '/analytics/status': '/analytics/performance'
+    };
+    const resolved = aliases[endpoint] || endpoint;
+    const match = Object.entries(endpoints).find(([, value]) => value[0] === resolved);
     if (match) loadModule(match[0]);
   });
 
