@@ -21,13 +21,22 @@ class PaperBroker(BrokerInterface):
         self,
         *,
         engine: PaperTradingEngine | None = None,
-        initial_cash_mxn: Decimal | int | float | str = Decimal("10000"),
+        initial_cash_mxn: Decimal | int | float | str | None = None,
+        settings: Any | None = None,
     ) -> None:
+        configured_cash = initial_cash_mxn
+        if configured_cash is None:
+            configured_cash = getattr(settings, "simulated_initial_capital_mxn", 1000)
         self.engine = engine or PaperTradingEngine(
-            portfolio=PortfolioManager(initial_cash_mxn=initial_cash_mxn)
+            portfolio=PortfolioManager(initial_cash_mxn=configured_cash)
         )
         self.connected = False
         self._last_prices: dict[str, Decimal] = {}
+        self.stop_loss_pct = to_decimal(getattr(settings, "paper_stop_loss_pct", 3.0))
+        self.take_profit_pct = to_decimal(getattr(settings, "paper_take_profit_pct", 6.0))
+        self.trailing_stop_pct = to_decimal(
+            getattr(settings, "paper_trailing_stop_pct", 2.0)
+        )
 
     def connect(self) -> BrokerHealth:
         self.connected = True
@@ -53,7 +62,12 @@ class PaperBroker(BrokerInterface):
             snapshot.cash_mxn,
             snapshot.equity_mxn,
             positions_value,
-            {"broker": self.name},
+            {
+                "broker": self.name,
+                "realized_pnl_mxn": float(snapshot.realized_pnl_mxn),
+                "unrealized_pnl_mxn": float(snapshot.unrealized_pnl_mxn),
+                "closed_trades": len(snapshot.trades),
+            },
         )
 
     def get_positions(self) -> list[dict[str, Any]]:
@@ -77,6 +91,12 @@ class PaperBroker(BrokerInterface):
             for order in self.engine.portfolio.orders
         ]
 
+    def update_market(self, book: str, price: Decimal) -> list[Any]:
+        self._last_prices[book] = price
+        return self.engine.portfolio.update_market(
+            {book: price}, fee_rate=Decimal("0")
+        )
+
     def place_market_buy(
         self, *, book: str, amount_mxn: Decimal, price: Decimal | None = None
     ) -> BrokerOrder:
@@ -84,12 +104,21 @@ class PaperBroker(BrokerInterface):
         execution_price = price or self._last_prices.get(book) or Decimal("1")
         self._last_prices[book] = execution_price
         before = len(self.engine.portfolio.orders)
+        stop_loss = execution_price * (
+            Decimal("1") - self.stop_loss_pct / Decimal("100")
+        )
+        take_profit = execution_price * (
+            Decimal("1") + self.take_profit_pct / Decimal("100")
+        )
         position = self.engine.portfolio.open_position(
             book=book,
             price=execution_price,
             amount_mxn=to_decimal(amount_mxn),
             fee_rate=Decimal("0"),
             signal_data={"broker": self.name},
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            trailing_stop_pct=self.trailing_stop_pct,
         )
         order = (
             self.engine.portfolio.orders[-1]
@@ -120,7 +149,7 @@ class PaperBroker(BrokerInterface):
                     position.id,
                     price=execution_price,
                     fee_rate=Decimal("0"),
-                    reason="broker_market_sell",
+                    reason="strategy_sell",
                 )
                 order = self.engine.portfolio.orders[-1]
                 return BrokerOrder(
