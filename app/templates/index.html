@@ -15,11 +15,6 @@
     ('sol_mxn', 'SOL', 'Solana'),
     ('usdt_mxn', 'USDT', 'Tether'),
     ('xrp_mxn', 'XRP', 'XRP'),
-    ('doge_mxn', 'DOGE', 'Dogecoin · alta volatilidad'),
-    ('ada_mxn', 'ADA', 'Cardano'),
-    ('avax_mxn', 'AVAX', 'Avalanche · alta volatilidad'),
-    ('link_mxn', 'LINK', 'Chainlink'),
-    ('arb_mxn', 'ARB', 'Arbitrum · alta volatilidad'),
     ('algn_mxn', 'ALGN', 'Align Technology'),
     ('tsla_mxn', 'TSLA', 'Tesla'),
     ('aapl_mxn', 'AAPL', 'Apple')
@@ -27,7 +22,7 @@
 
   <main class="shell">
     <header>
-      <div><p class="eyebrow">PAUL AI TRADER</p><h1>Centro de control</h1><p class="muted">El sistema analiza más mercados y opera únicamente con dinero simulado.</p></div>
+      <div><p class="eyebrow">PAUL AI TRADER</p><h1>Centro de control</h1><p class="muted">El sistema opera solo con mercados verificados y dinero simulado.</p></div>
       <div class="section-title"><span class="mode {{ 'live' if live_trading else 'simulation' }}">{{ 'DINERO REAL ACTIVO' if live_trading else 'APRENDIZAJE ACELERADO' }}</span>{% if authenticated %}<button type="button" class="secondary" id="logoutBtn">Cerrar sesión</button>{% endif %}</div>
     </header>
 
@@ -49,12 +44,12 @@
           <article class="card metric"><span>Ganancia / pérdida</span><strong id="totalPnl">$0.00</strong><small id="totalReturn">0.00%</small></article>
           <article class="card metric"><span>Comisiones estimadas</span><strong id="totalFees">$0.00</strong><small>Entrada + salida</small></article>
         </section>
-        <section class="card portfolio-card"><div class="section-title"><div><p class="eyebrow">PORTAFOLIO SIMULADO</p><h2>Posiciones abiertas</h2></div><small id="positionsUpdated" class="muted">Esperando datos…</small></div><div id="openPositions" class="positions-list"><p>No hay posiciones abiertas.</p></div><p class="portfolio-note">Cada operación automática usa normalmente $50 MXN. El motor prueba más activos para generar observaciones con mayor rapidez, pero mantiene stop loss, take profit y trailing stop.</p></section>
+        <section class="card portfolio-card"><div class="section-title"><div><p class="eyebrow">PORTAFOLIO SIMULADO</p><h2>Posiciones abiertas</h2></div><small id="positionsUpdated" class="muted">Esperando datos…</small></div><div id="openPositions" class="positions-list"><p>No hay posiciones abiertas.</p></div><p class="portfolio-note">Cada operación automática usa normalmente $50 MXN. El motor analiza BTC, ETH, SOL, XRP y USDT; no intenta abrir mercados que todavía no están confirmados en el proveedor.</p></section>
         <section class="insight-grid"><article class="card insight-card"><p class="eyebrow">OPERACIÓN AUTOMÁTICA</p><h3 id="overviewPaperState">Consultando…</h3><p id="overviewPaperDetail">Estado del motor simulado.</p></article><article class="card insight-card"><p class="eyebrow">ÚLTIMA DECISIÓN</p><h3 id="overviewStrategyState">Sin datos todavía</h3><p id="overviewStrategyDetail">Se mostrará cuando el motor analice el mercado.</p></article><article class="card insight-card"><p class="eyebrow">APRENDIZAJE Y CONTROL</p><h3 id="overviewValidationState">Consultando…</h3><p id="overviewValidationDetail">El progreso real aparece en Estado de la aplicación como observaciones acumuladas.</p></article></section>
       </div>
 
       <div data-dashboard-panel="markets" class="hidden">
-        <section class="card"><div class="section-title"><div><p class="eyebrow">MERCADO</p><h2>Señales y precios</h2><p class="muted">Cripto usa Bitso. Los activos sin libro disponible se omiten sin detener al resto del motor.</p></div><div class="market-actions"><small id="statusText" class="muted">Actualización automática</small><button class="secondary" id="refreshBtn">Actualizar ahora</button></div></div><p id="marketCatalogStatusV2" class="market-catalog-status">Cargando señales y precios…</p><div id="marketFiltersV2" class="market-filters"><div class="market-filter-group"><span>Tipo</span><button type="button" class="market-filter active" data-type-filter="all">Todos</button><button type="button" class="market-filter" data-type-filter="markets">Cripto</button><button type="button" class="market-filter" data-type-filter="stocks">Acciones</button></div><div class="market-filter-group"><span>Señal</span><button type="button" class="market-filter active" data-signal-filter="all">Todas</button><button type="button" class="market-filter filter-buy" data-signal-filter="buy">Comprar</button><button type="button" class="market-filter filter-hold" data-signal-filter="hold">Mantener</button><button type="button" class="market-filter filter-sell" data-signal-filter="sell">Vender si tienes</button></div></div><div id="marketGridV2" class="books market-grid-v2">{% for asset in curated_assets %}{% if asset[0] in allowed_books %}<button type="button" class="book market-book-v2 signal-hold {% if asset[0] == 'btc_mxn' %}active{% endif %}" data-book="{{ asset[0] }}"><span class="market-card-head"><span><strong class="market-symbol">{{ asset[1] }}</strong><small>{{ asset[2] }}</small></span><strong class="market-action">MANTENER</strong></span><span class="market-price">Cargando…</span><small>Consultando mercado</small><small class="market-route">Esperando proveedor</small><small class="market-updated">Sin actualizar</small></button>{% endif %}{% endfor %}</div><div id="marketResult" class="market-result"><p>Selecciona un activo para consultar su señal.</p></div></section>
+        <section class="card"><div class="section-title"><div><p class="eyebrow">MERCADO</p><h2>Señales y precios</h2><p class="muted">Cripto usa Bitso. Solo se muestran libros actualmente configurados y verificados.</p></div><div class="market-actions"><small id="statusText" class="muted">Actualización automática</small><button class="secondary" id="refreshBtn">Actualizar ahora</button></div></div><p id="marketCatalogStatusV2" class="market-catalog-status">Cargando señales y precios…</p><div id="marketFiltersV2" class="market-filters"><div class="market-filter-group"><span>Tipo</span><button type="button" class="market-filter active" data-type-filter="all">Todos</button><button type="button" class="market-filter" data-type-filter="markets">Cripto</button><button type="button" class="market-filter" data-type-filter="stocks">Acciones</button></div><div class="market-filter-group"><span>Señal</span><button type="button" class="market-filter active" data-signal-filter="all">Todas</button><button type="button" class="market-filter filter-buy" data-signal-filter="buy">Comprar</button><button type="button" class="market-filter filter-hold" data-signal-filter="hold">Mantener</button><button type="button" class="market-filter filter-sell" data-signal-filter="sell">Vender si tienes</button></div></div><div id="marketGridV2" class="books market-grid-v2">{% for asset in curated_assets %}{% if asset[0] in allowed_books %}<button type="button" class="book market-book-v2 signal-hold {% if asset[0] == 'btc_mxn' %}active{% endif %}" data-book="{{ asset[0] }}"><span class="market-card-head"><span><strong class="market-symbol">{{ asset[1] }}</strong><small>{{ asset[2] }}</small></span><strong class="market-action">MANTENER</strong></span><span class="market-price">Cargando…</span><small>Consultando mercado</small><small class="market-route">Esperando proveedor</small><small class="market-updated">Sin actualizar</small></button>{% endif %}{% endfor %}</div><div id="marketResult" class="market-result"><p>Selecciona un activo para consultar su señal.</p></div></section>
         <section class="card"><p class="eyebrow">ORDEN MANUAL DE PRUEBA</p><h2>Abrir compra simulada</h2><form id="orderForm" class="order-form"><label>Activo<select id="orderBook">{% for asset in curated_assets %}{% if asset[0] in allowed_books %}<option value="{{ asset[0] }}">{{ asset[1] }} · {{ asset[2] }}</option>{% endif %}{% endfor %}</select></label><input id="orderSide" type="hidden" value="buy"><label>Monto MXN<input id="orderAmount" type="number" min="1" max="{{ max_order }}" value="50"></label><button type="submit">Comprar en simulación</button></form><p class="muted">La compra manual es opcional. El motor automático opera normalmente con $50 MXN y puede mantener varias posiciones. Máximo manual: ${{ '%.0f'|format(max_order) }} MXN.</p><p id="orderMessage"></p></section>
       </div>
 
@@ -70,8 +65,8 @@
 
   <script src="/static/app.js?v=20260720-8"></script>
   <script>window.marketBridge={getSelected:()=>selectedBook,select:book=>{selectedBook=book;const option=document.querySelector(`#orderBook option[value="${book}"]`);if(option)document.querySelector('#orderBook').value=book;return refreshMarket();},refresh:()=>refreshMarket()};</script>
-  <script src="/static/market-panel-v2.js?v=20260722-5"></script>
-  <script src="/static/dashboard-v2.js?v=20260722-5"></script>
+  <script src="/static/market-panel-v2.js?v=20260722-6"></script>
+  <script src="/static/dashboard-v2.js?v=20260722-6"></script>
   <script src="/static/capital-balance.js?v=20260721-1"></script>
 </body>
 </html>
