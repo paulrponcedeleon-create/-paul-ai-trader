@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>{{ app_name }}</title>
   <link rel="stylesheet" href="/static/app.css?v=20260720-8">
-  <link rel="stylesheet" href="/static/market-panel-v2.css?v=20260720-2">
+  <link rel="stylesheet" href="/static/market-panel-v2.css?v=20260722-1">
+  <link rel="stylesheet" href="/static/dashboard-v2.css?v=20260722-1">
 </head>
 <body>
   {% set curated_assets = [
@@ -13,90 +14,62 @@
     ('eth_mxn', 'ETH', 'Ether'),
     ('sol_mxn', 'SOL', 'Solana'),
     ('atom_mxn', 'ATOM', 'Cosmos'),
-    ('mxn_cash', 'MXN', 'Peso mexicano'),
-    ('usdc_mxn', 'USD', 'Dólar digital (USDC)'),
+    ('usdc_mxn', 'USDC', 'USD Coin'),
     ('usdt_mxn', 'USDT', 'Tether'),
     ('paxg_mxn', 'PAXG', 'PAX Gold'),
     ('xrp_mxn', 'XRP', 'XRP'),
     ('algn_mxn', 'ALGN', 'Align Technology'),
-    ('pstg_mxn', 'PSTG', 'Everpure, Inc.'),
     ('tsla_mxn', 'TSLA', 'Tesla'),
     ('aapl_mxn', 'AAPL', 'Apple')
   ] %}
 
   <main class="shell">
     <header>
-      <div><p class="eyebrow">PAUL AI TRADER</p><h1>Panel de inversión</h1></div>
-      <div class="section-title">
-        <span class="mode {{ 'live' if live_trading else 'simulation' }}">{{ 'LIVE' if live_trading else 'SIMULACIÓN' }}</span>
-        {% if authenticated %}<button type="button" class="secondary" id="logoutBtn">Cerrar sesión</button>{% endif %}
-      </div>
+      <div><p class="eyebrow">PAUL AI TRADER</p><h1>Centro de control</h1><p class="muted">Mercado, simulación, estrategias y validación.</p></div>
+      <div class="section-title"><span class="mode {{ 'live' if live_trading else 'simulation' }}">{{ 'LIVE' if live_trading else 'SIMULACIÓN' }}</span>{% if authenticated %}<button type="button" class="secondary" id="logoutBtn">Cerrar sesión</button>{% endif %}</div>
     </header>
 
     {% if authenticated %}<nav class="main-nav" aria-label="Navegación principal"><a href="/" class="active" aria-current="page">Dashboard</a><a href="/performance">Rendimiento</a></nav>{% endif %}
 
-    <section id="loginCard" class="card {% if authenticated %}hidden{% endif %}">
-      <h2>Acceso privado</h2><p>Ingresa la contraseña configurada en Render.</p>
-      <form id="loginForm"><input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required><button type="submit">Entrar</button></form>
-      <p id="loginError" class="error"></p>
-    </section>
+    <section id="loginCard" class="card {% if authenticated %}hidden{% endif %}"><h2>Acceso privado</h2><p>Ingresa la contraseña configurada en Render.</p><form id="loginForm"><input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required><button type="submit">Entrar</button></form><p id="loginError" class="error"></p></section>
 
     <div id="appContent" class="{% if not authenticated %}hidden{% endif %}">
-      <section class="summary-grid">
-        <article class="card metric"><span>Efectivo disponible</span><strong>$0.00</strong><small>Calculando saldo…</small></article>
-        <article class="card metric"><span>Posiciones abiertas</span><strong id="openPositionCount">0</strong><small>En seguimiento</small></article>
-        <article class="card metric"><span>Total invertido</span><strong id="totalInvested">$0.00</strong><small>MXN</small></article>
-        <article class="card metric"><span>Valor neto actual</span><strong id="totalCurrentValue">$0.00</strong><small>Después de comisiones</small></article>
-        <article class="card metric"><span>Ganancia / pérdida</span><strong id="totalPnl">$0.00</strong><small id="totalReturn">0.00%</small></article>
-        <article class="card metric"><span>Comisiones estimadas</span><strong id="totalFees">$0.00</strong><small>Entrada + salida</small></article>
-      </section>
+      <section class="system-strip"><span><i class="status-dot pending" id="statusRuntimeDot"></i>Runtime <strong id="statusRuntime">Consultando</strong></span><span><i class="status-dot pending" id="statusMarketDot"></i>Mercado <strong id="statusMarket">Consultando</strong></span><span><i class="status-dot pending" id="statusDatabaseDot"></i>Base de datos <strong id="statusDatabase">Consultando</strong></span><span><i class="status-dot off"></i>Live <strong>OFF</strong></span><span class="system-last-update">Actualizado <strong id="systemLastUpdated">—</strong></span></section>
 
-      <section class="card portfolio-card">
-        <div class="section-title"><div><p class="eyebrow">PORTAFOLIO SIMULADO</p><h2>Posiciones abiertas en vivo</h2></div><small id="positionsUpdated" class="muted">Esperando datos…</small></div>
-        <div id="openPositions" class="positions-list"><p>No hay posiciones abiertas.</p></div>
-        <p class="portfolio-note">Verde indica ganancia, rojo pérdida y azul equilibrio. Toca una posición para ver precio de entrada, comisiones, equilibrio y cerrarla. Actualización automática cada 5 segundos.</p>
-      </section>
+      <nav class="workspace-tabs"><button type="button" class="workspace-tab active" data-dashboard-tab="overview">Resumen</button><button type="button" class="workspace-tab" data-dashboard-tab="markets">Mercados</button><button type="button" class="workspace-tab" data-dashboard-tab="paper">Paper Trading</button><button type="button" class="workspace-tab" data-dashboard-tab="strategies">Estrategias</button><button type="button" class="workspace-tab" data-dashboard-tab="validation">Validación</button><button type="button" class="workspace-tab" data-dashboard-tab="system">Sistema</button></nav>
 
-      <section class="card">
-        <div class="section-title"><div><p class="eyebrow">MERCADO</p><h2>Señales visuales</h2></div><div class="market-actions"><small id="statusText" class="muted">Listo</small><button class="secondary" id="refreshBtn">Actualizar</button></div></div>
-        <p id="marketCatalogStatusV2" class="market-catalog-status">Cargando señales y precios…</p>
-        <div id="marketFiltersV2" class="market-filters">
-          <div class="market-filter-group"><span>Tipo</span><button type="button" class="market-filter active" data-type-filter="all">Todos</button><button type="button" class="market-filter" data-type-filter="markets">Cripto y monedas</button><button type="button" class="market-filter" data-type-filter="stocks">Acciones</button></div>
-          <div class="market-filter-group"><span>Señal</span><button type="button" class="market-filter active" data-signal-filter="all">Todas</button><button type="button" class="market-filter filter-buy" data-signal-filter="buy">Comprar</button><button type="button" class="market-filter filter-hold" data-signal-filter="hold">Mantener</button><button type="button" class="market-filter filter-sell" data-signal-filter="sell">Vender si tienes</button></div>
-        </div>
-        <div id="marketGridV2" class="books market-grid-v2">
-          {% for asset in curated_assets %}{% if asset[0] in allowed_books %}
-          <button type="button" class="book market-book-v2 signal-hold {% if asset[0] == 'btc_mxn' %}active{% endif %}" data-book="{{ asset[0] }}"><span class="market-card-head"><span><strong class="market-symbol">{{ asset[1] }}</strong><small>{{ asset[2] }}</small></span><strong class="market-action">MANTENER</strong></span><span class="market-price">Cargando…</span><small>Consultando costo</small><small class="market-route">Consultando Bitso</small></button>
-          {% endif %}{% endfor %}
-        </div>
-        <div id="marketResult" class="market-result"><p>Selecciona un activo para consultar su señal.</p></div>
-      </section>
+      <div data-dashboard-panel="overview">
+        <section class="summary-grid">
+          <article class="card metric"><span>Efectivo disponible</span><strong>$0.00</strong><small>Saldo simulado en MXN</small></article>
+          <article class="card metric"><span>Posiciones abiertas</span><strong id="openPositionCount">0</strong><small>En seguimiento</small></article>
+          <article class="card metric"><span>Total invertido</span><strong id="totalInvested">$0.00</strong><small>MXN</small></article>
+          <article class="card metric"><span>Valor neto actual</span><strong id="totalCurrentValue">$0.00</strong><small>Después de comisiones</small></article>
+          <article class="card metric"><span>Ganancia / pérdida</span><strong id="totalPnl">$0.00</strong><small id="totalReturn">0.00%</small></article>
+          <article class="card metric"><span>Comisiones estimadas</span><strong id="totalFees">$0.00</strong><small>Entrada + salida</small></article>
+        </section>
+        <section class="card portfolio-card"><div class="section-title"><div><p class="eyebrow">PORTAFOLIO SIMULADO</p><h2>Posiciones abiertas</h2></div><small id="positionsUpdated" class="muted">Esperando datos…</small></div><div id="openPositions" class="positions-list"><p>No hay posiciones abiertas.</p></div><p class="portfolio-note">Los precios de ejecución, valoración y P&amp;L de cripto provienen de Bitso. Las fuentes externas se usan únicamente para análisis complementario.</p></section>
+        <section class="insight-grid"><article class="card insight-card"><p class="eyebrow">PAPER TRADING</p><h3 id="overviewPaperState">Consultando…</h3><p id="overviewPaperDetail">Estado del motor simulado.</p></article><article class="card insight-card"><p class="eyebrow">ESTRATEGIA ACTIVA</p><h3 id="overviewStrategyState">Sin datos todavía</h3><p id="overviewStrategyDetail">Se mostrará cuando el runtime la publique.</p></article><article class="card insight-card"><p class="eyebrow">VALIDACIÓN</p><h3 id="overviewValidationState">Consultando…</h3><p id="overviewValidationDetail">Promociones y retiros.</p></article></section>
+      </div>
 
-      <section class="card">
-        <p class="eyebrow">ORDEN CONTROLADA</p><h2>Abrir compra simulada</h2>
-        <form id="orderForm" class="order-form">
-          <label>Activo<select id="orderBook">{% for asset in curated_assets %}{% if asset[0] in allowed_books and asset[0] != 'mxn_cash' %}<option value="{{ asset[0] }}">{{ asset[1] }} · {{ asset[2] }}</option>{% endif %}{% endfor %}</select></label>
-          <input id="orderSide" type="hidden" value="buy">
-          <label>Monto MXN<input id="orderAmount" type="number" min="1" max="{{ max_order }}" value="100"></label>
-          <button type="submit">Comprar en simulación</button>
-        </form>
-        <p class="muted">Solo puedes comprar con el efectivo disponible. Para vender, cierra una posición abierta. Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN.</p>
-        <p id="orderMessage"></p>
-      </section>
+      <div data-dashboard-panel="markets" class="hidden">
+        <section class="card"><div class="section-title"><div><p class="eyebrow">MERCADO</p><h2>Señales y precios</h2><p class="muted">Cripto usa Bitso. Las acciones son referencia analítica separada.</p></div><div class="market-actions"><small id="statusText" class="muted">Actualización automática</small><button class="secondary" id="refreshBtn">Actualizar ahora</button></div></div><p id="marketCatalogStatusV2" class="market-catalog-status">Cargando señales y precios…</p><div id="marketFiltersV2" class="market-filters"><div class="market-filter-group"><span>Tipo</span><button type="button" class="market-filter active" data-type-filter="all">Todos</button><button type="button" class="market-filter" data-type-filter="markets">Cripto</button><button type="button" class="market-filter" data-type-filter="stocks">Acciones</button></div><div class="market-filter-group"><span>Señal</span><button type="button" class="market-filter active" data-signal-filter="all">Todas</button><button type="button" class="market-filter filter-buy" data-signal-filter="buy">Comprar</button><button type="button" class="market-filter filter-hold" data-signal-filter="hold">Mantener</button><button type="button" class="market-filter filter-sell" data-signal-filter="sell">Vender si tienes</button></div></div><div id="marketGridV2" class="books market-grid-v2">{% for asset in curated_assets %}{% if asset[0] in allowed_books %}<button type="button" class="book market-book-v2 signal-hold {% if asset[0] == 'btc_mxn' %}active{% endif %}" data-book="{{ asset[0] }}"><span class="market-card-head"><span><strong class="market-symbol">{{ asset[1] }}</strong><small>{{ asset[2] }}</small></span><strong class="market-action">MANTENER</strong></span><span class="market-price">Cargando…</span><small>Consultando mercado</small><small class="market-route">Esperando proveedor</small><small class="market-updated">Sin actualizar</small></button>{% endif %}{% endfor %}</div><div id="marketResult" class="market-result"><p>Selecciona un activo para consultar su señal.</p></div></section>
+        <section class="card"><p class="eyebrow">ORDEN CONTROLADA</p><h2>Abrir compra simulada</h2><form id="orderForm" class="order-form"><label>Activo<select id="orderBook">{% for asset in curated_assets %}{% if asset[0] in allowed_books %}<option value="{{ asset[0] }}">{{ asset[1] }} · {{ asset[2] }}</option>{% endif %}{% endfor %}</select></label><input id="orderSide" type="hidden" value="buy"><label>Monto MXN<input id="orderAmount" type="number" min="1" max="{{ max_order }}" value="100"></label><button type="submit">Comprar en simulación</button></form><p class="muted">Solo puedes comprar con el efectivo disponible. Para vender, cierra una posición abierta. Máximo por operación: ${{ '%.0f'|format(max_order) }} MXN.</p><p id="orderMessage"></p></section>
+      </div>
 
-      <section class="card"><div class="section-title"><div><p class="eyebrow">HISTORIAL</p><h2>Últimas 5 operaciones</h2></div></div><div id="history"><p>Sin operaciones todavía.</p></div><p id="historyMeta" class="history-meta"></p><div class="history-actions"><button type="button" class="secondary hidden" id="loadMoreBtn">Cargar 5 más</button></div></section>
+      <div data-dashboard-panel="paper" class="hidden"><section class="card module-panel"><div class="section-title"><div><p class="eyebrow">PAPER TRADING</p><h2>Estado de simulación</h2></div><button class="secondary module-refresh" data-module-endpoint="/paper-trading/status">Actualizar</button></div><div id="paperModule" class="module-content"><p>Consultando estado…</p></div></section><section class="card"><div class="section-title"><div><p class="eyebrow">HISTORIAL</p><h2>Últimas 5 operaciones</h2></div></div><div id="history"><p>Sin operaciones todavía.</p></div><p id="historyMeta" class="history-meta"></p><div class="history-actions"><button type="button" class="secondary hidden" id="loadMoreBtn">Cargar 5 más</button></div></section></div>
+      <div data-dashboard-panel="strategies" class="hidden"><section class="card module-panel"><div class="section-title"><div><p class="eyebrow">ESTRATEGIAS</p><h2>Selección adaptativa</h2></div><button class="secondary module-refresh" data-module-endpoint="/adaptive/status">Actualizar</button></div><div id="strategiesModule" class="module-content"><p>Consultando estrategias…</p></div></section><section class="card module-panel"><div class="section-title"><div><p class="eyebrow">ANALÍTICA</p><h2>Rendimiento del motor</h2></div><button class="secondary module-refresh" data-module-endpoint="/analytics/status">Actualizar</button></div><div id="analyticsModule" class="module-content"><p>Consultando analítica…</p></div></section></div>
+      <div data-dashboard-panel="validation" class="hidden"><section class="card module-panel"><div class="section-title"><div><p class="eyebrow">VALIDACIÓN CONTINUA</p><h2>Promociones y retiros</h2></div><button class="secondary module-refresh" data-module-endpoint="/validation/status">Actualizar</button></div><div id="validationModule" class="module-content"><p>Consultando validación…</p></div></section></div>
+      <div data-dashboard-panel="system" class="hidden"><section class="system-grid"><article class="card module-panel"><p class="eyebrow">HEALTH</p><div id="healthModule" class="module-content"><p>Consultando…</p></div></article><article class="card module-panel"><p class="eyebrow">READINESS</p><div id="readinessModule" class="module-content"><p>Consultando…</p></div></article><article class="card module-panel"><p class="eyebrow">RUNTIME</p><div id="runtimeModule" class="module-content"><p>Consultando…</p></div></article><article class="card module-panel"><p class="eyebrow">SYSTEM</p><div id="systemModule" class="module-content"><p>Consultando…</p></div></article></section></div>
 
       <dialog id="closePositionDialog" class="close-dialog"><form method="dialog" class="dialog-card"><div class="section-title"><div><p class="eyebrow">CONFIRMAR CIERRE</p><h2 id="closeDialogBook">Cerrar posición</h2></div><button type="submit" class="icon-button" value="cancel" aria-label="Cancelar">×</button></div><div class="close-preview"><div><span>Valor neto estimado</span><strong id="closeDialogValue">$0.00</strong></div><div><span>Ganancia / pérdida neta</span><strong id="closeDialogPnl">$0.00</strong><small id="closeDialogReturn">0.00%</small></div><div><span>Comisión de salida</span><strong id="closeDialogFee">$0.00</strong></div><div><span>Precio actual</span><strong id="closeDialogPrice">$0.00</strong></div></div><p class="muted">Al cerrar, el resultado deja de cambiar y pasa a Rendimiento como ganancia o pérdida realizada.</p><div class="dialog-actions"><button type="submit" class="secondary" value="cancel">Cancelar</button><button type="button" id="confirmClosePosition">Cerrar posición</button></div></form></dialog>
-
       <footer><p>Las señales son educativas y no garantizan rendimientos. El modo real permanece bloqueado por defecto.</p></footer>
     </div>
   </main>
 
   <script src="/static/app.js?v=20260720-8"></script>
-  <script>
-    window.marketBridge = {getSelected: () => selectedBook, select: book => {selectedBook = book; const option = document.querySelector(`#orderBook option[value="${book}"]`); if (option) document.querySelector("#orderBook").value = book; return refreshMarket();}, refresh: () => refreshMarket()};
-  </script>
-  <script src="/static/market-panel-v2.js?v=20260720-3"></script>
+  <script>window.marketBridge={getSelected:()=>selectedBook,select:book=>{selectedBook=book;const option=document.querySelector(`#orderBook option[value="${book}"]`);if(option)document.querySelector('#orderBook').value=book;return refreshMarket();},refresh:()=>refreshMarket()};</script>
+  <script src="/static/market-panel-v2.js?v=20260722-1"></script>
+  <script src="/static/dashboard-v2.js?v=20260722-1"></script>
   <script src="/static/capital-balance.js?v=20260721-1"></script>
 </body>
 </html>
