@@ -26,13 +26,13 @@ from app.system import SystemService
 
 @dataclass(frozen=True)
 class RuntimeConfig:
-    loop_interval_seconds: float = 60.0
+    loop_interval_seconds: float = 30.0
     books: tuple[str, ...] = ("btc_mxn",)
     timeframe: str = "1m"
     strategy_name: str = "momentum"
     strategy_version: str = "1.0"
     strategy_parameters: dict[str, Any] = field(default_factory=dict)
-    trade_amount_mxn: Decimal = Decimal("100")
+    trade_amount_mxn: Decimal = Decimal("50")
     market_data_provider: str = "bitso"
     broker_name: str = "paper"
     max_history: int = 200
@@ -66,6 +66,12 @@ class RuntimeStatus:
     equity_mxn: float
     realized_pnl_mxn: float
     unrealized_pnl_mxn: float
+    observations: int
+    learning_stage: str
+    learning_progress_pct: float
+    decision_counts: dict[str, int]
+    books_ready: list[str]
+    books_pending: dict[str, str]
 
     def to_public_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -107,6 +113,9 @@ class RuntimeEngine:
         self.last_decision: dict[str, Any] | None = None
         self.last_order: dict[str, Any] | None = None
         self.history: dict[str, list[Any]] = {book: [] for book in self.config.books}
+        self.book_errors: dict[str, str] = {}
+        self.decision_counts: dict[str, int] = {"buy": 0, "sell": 0, "hold": 0}
+        self.observations = 0
         self.started_at = time.monotonic()
 
     async def start(self) -> RuntimeStatus:
@@ -127,22 +136,27 @@ class RuntimeEngine:
     async def run_once(self) -> RuntimeStatus:
         if not self.running:
             await self.start()
-        try:
-            for book in self.config.books:
+        cycle_errors: list[str] = []
+        for book in self.config.books:
+            try:
                 await self._process_book(book)
-            self.cycles += 1
-            self.system.watchdog.heartbeat("Runtime")
-            self.last_error = None
-        except Exception as exc:
-            self.last_error = f"{type(exc).__name__}: {exc}"
+                self.book_errors.pop(book, None)
+            except Exception as exc:
+                message = f"{type(exc).__name__}: {exc}"
+                self.book_errors[book] = message
+                cycle_errors.append(f"{book}: {message}")
+                self.system.events.publish(
+                    "WARNING",
+                    "Market",
+                    "runtime",
+                    "book_cycle_failed",
+                    {"book": book, "error_type": type(exc).__name__},
+                )
+        self.cycles += 1
+        self.system.watchdog.heartbeat("Runtime")
+        self.last_error = "; ".join(cycle_errors[:3]) if cycle_errors else None
+        if cycle_errors and len(cycle_errors) == len(self.config.books):
             self.system.watchdog.record_error("Runtime")
-            self.system.events.publish(
-                "ERROR",
-                "System",
-                "runtime",
-                "runtime_cycle_failed",
-                {"error_type": type(exc).__name__},
-            )
         return self.status()
 
     async def run_cycles(self, count: int) -> RuntimeStatus:
@@ -153,9 +167,20 @@ class RuntimeEngine:
             await asyncio.sleep(0)
         return self.status()
 
+    def _learning_stage(self) -> tuple[str, float]:
+        if self.observations < 100:
+            return "Recolectando datos", self.observations
+        if self.observations < 500:
+            return "Generando primeras estadísticas", self.observations / 5
+        if self.observations < 1000:
+            return "Comparando patrones", 50 + (self.observations - 500) / 10
+        return "Base suficiente para proponer ajustes", 100.0
+
     def status(self) -> RuntimeStatus:
         balance = self.broker.get_balance()
         meta = balance.metadata or {}
+        stage, progress = self._learning_stage()
+        ready = sorted(book for book, rows in self.history.items() if rows)
         return RuntimeStatus(
             self.running,
             self.cycles,
@@ -169,6 +194,12 @@ class RuntimeEngine:
             float(balance.equity_mxn),
             float(meta.get("realized_pnl_mxn", 0)),
             float(meta.get("unrealized_pnl_mxn", 0)),
+            self.observations,
+            stage,
+            round(min(progress, 100.0), 1),
+            self.decision_counts.copy(),
+            ready,
+            self.book_errors.copy(),
         )
 
     def components(self) -> dict[str, Any]:
@@ -177,6 +208,7 @@ class RuntimeEngine:
             "broker": self.broker.health().to_public_dict(),
             "system": self.system.status(),
             "history_lengths": {book: len(rows) for book, rows in self.history.items()},
+            "book_errors": self.book_errors.copy(),
             "risk_rules": {
                 "automatic_stop_loss": True,
                 "automatic_take_profit": True,
@@ -191,7 +223,7 @@ class RuntimeEngine:
             book, self.config.timeframe, requested
         )
         if not candles:
-            return
+            raise RuntimeError("Sin velas disponibles para este mercado.")
         if not rows:
             rows.extend(candles[-self.config.max_history :])
         else:
@@ -243,6 +275,8 @@ class RuntimeEngine:
                 ),
             )
         )
+        self.observations += 1
+        self.decision_counts[decision.action] = self.decision_counts.get(decision.action, 0) + 1
         self.last_decision = {
             **decision.to_public_dict(),
             "book": book,
