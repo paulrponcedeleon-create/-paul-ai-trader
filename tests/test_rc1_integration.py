@@ -29,11 +29,15 @@ def _write_dataset(tmp_path):
 
 
 class LocalSettings:
+    app_name = "Paul AI Trader"
     app_env = "test"
     app_password = "test-password"
     session_secret = "test-session-secret-with-more-than-32-characters"
     session_cookie_secure = False
     live_trading = False
+    allowed_books_set = {"btc_mxn"}
+    max_order_mxn = 500.0
+    simulated_initial_capital_mxn = 5000.0
 
     def __init__(self, tmp_path):
         self.resolved_paul_data_dir = (tmp_path / "data").resolve()
