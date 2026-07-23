@@ -1,0 +1,120 @@
+{
+  "audit": {
+    "name": "v3-baseline",
+    "branch": "audit-v3-baseline",
+    "base_commit": "16d2697",
+    "base_commit_note": "latest local v2-dashboard-equivalent merge commit available in this container",
+    "spec_source_requested": "origin/docs-v3-architecture:docs/v3/CODEX_PARALLEL_BASELINE_AUDIT.md",
+    "spec_source_status": "unavailable locally; remote fetch blocked by CONNECT tunnel 403",
+    "scope": "documentation-only",
+    "allowed_path": "docs/audit/v3-baseline/",
+    "external_trading_calls": false,
+    "production_files_modified": false
+  },
+  "repository": {
+    "application_root": "app/",
+    "tests_root": "tests/",
+    "migrations_root": "migrations/",
+    "docs_root": "docs/",
+    "ci_workflow": ".github/workflows/v2-ci.yml",
+    "templates": ["app/templates/index.html", "app/templates/performance.html"],
+    "static_assets": [
+      "app/static/app.js",
+      "app/static/dashboard-v2.js",
+      "app/static/market-panel-v2.js",
+      "app/static/capital-balance.js",
+      "app/static/performance.js"
+    ]
+  },
+  "api": {
+    "static_route_count": 113,
+    "legacy_main_routes": 11,
+    "router_directory": "app/api/routes/",
+    "v3_namespace_present": false,
+    "duplicated_concepts": [
+      "legacy /api/orders vs router /orders",
+      "legacy /api/positions vs router /positions",
+      "legacy /api/market/{book} vs router /market/{book}"
+    ]
+  },
+  "persistence": {
+    "alembic_revisions": [
+      "20260720_0001",
+      "20260720_0002",
+      "20260720_0003",
+      "20260721_0004",
+      "20260722_0005",
+      "20260722_0006",
+      "20260722_0007"
+    ],
+    "domains": [
+      "simulated_orders",
+      "backtests",
+      "optimizations",
+      "paper_trading",
+      "analytics"
+    ],
+    "runtime_state_persistent": false
+  },
+  "runtime": {
+    "default_provider": "bitso",
+    "default_broker": "paper",
+    "default_books": ["btc_mxn", "eth_mxn", "sol_mxn", "xrp_mxn", "usdt_mxn"],
+    "auto_start": true,
+    "known_baseline_failure": "runtime.last_order can remain null when risk rejects all suggested buys"
+  },
+  "markets": {
+    "read_only_provider": true,
+    "bitso_candles": "synthetic_from_ticker",
+    "visible_verified_assets": ["BTC", "ETH", "SOL", "USDT", "XRP", "ALGN", "TSLA", "AAPL"]
+  },
+  "capital": {
+    "fee_aware_pnl": true,
+    "partial_paper_closes_in_baseline": false,
+    "separate_ledgers": ["simulated_orders", "paper_trading", "backtesting"]
+  },
+  "security": {
+    "live_trading_default": false,
+    "runtime_broker_guard_when_live_false": true,
+    "session_middleware": true,
+    "csrf_visible": false,
+    "hardcoded_api_keys_found": false
+  },
+  "checks": [
+    {
+      "command": "git fetch --all --prune",
+      "status": "warning",
+      "detail": "remote unavailable/blocked in this environment"
+    },
+    {
+      "command": "git show origin/docs-v3-architecture:docs/v3/CODEX_PARALLEL_BASELINE_AUDIT.md",
+      "status": "warning",
+      "detail": "invalid object name; branch unavailable locally"
+    },
+    {
+      "command": "python -m pytest -q --tb=short",
+      "status": "fail",
+      "detail": "baseline runtime test fails with NoneType last_order"
+    },
+    {
+      "command": "python -m ruff check .",
+      "status": "pass",
+      "detail": "all checks passed"
+    }
+  ],
+  "documents": [
+    "README.md",
+    "repository-structure.md",
+    "api-routes.md",
+    "models-and-migrations.md",
+    "runtime.md",
+    "markets-and-bitso.md",
+    "capital-positions-fees-pnl.md",
+    "dashboard-and-javascript.md",
+    "tests-and-ci.md",
+    "security-and-configuration.md",
+    "technical-debt.md",
+    "v3-gap-analysis.md",
+    "inventory.json"
+  ]
+}
