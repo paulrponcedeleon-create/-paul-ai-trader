@@ -133,35 +133,71 @@ class PortfolioManager:
         return position
 
     def close_position(
-        self, position_id: str, *, price: Decimal, fee_rate: Decimal, reason: str
+        self,
+        position_id: str,
+        *,
+        price: Decimal,
+        fee_rate: Decimal,
+        reason: str,
+        amount_mxn: Decimal | int | float | str | None = None,
     ) -> PaperTrade | None:
-        position = self.positions.pop(position_id, None)
+        position = self.positions.get(position_id)
         if position is None:
             return None
-        gross_exit = position.quantity * price
+        close_amount = position.amount_mxn
+        if amount_mxn is not None:
+            close_amount = min(round_money(to_decimal(amount_mxn)), position.amount_mxn)
+        if close_amount <= 0:
+            return None
+        proportion = close_amount / position.amount_mxn
+        closed_quantity = position.quantity * proportion
+        closed_entry_fee = round_money(position.entry_fee_mxn * proportion)
+        gross_exit = closed_quantity * price
         exit_fee = round_money(gross_exit * fee_rate)
         cash_back = round_money(gross_exit - exit_fee)
-        pnl = round_money(cash_back - position.amount_mxn - position.entry_fee_mxn)
+        pnl = round_money(cash_back - close_amount - closed_entry_fee)
         self.cash_mxn = round_money(self.cash_mxn + cash_back)
         self.realized_pnl_mxn = round_money(self.realized_pnl_mxn + pnl)
-        position.status = "closed"
-        position.closed_at = utc_now()
-        position.exit_price = price
-        position.exit_fee_mxn = exit_fee
-        position.realized_pnl_mxn = pnl
-        position.close_reason = reason
-        self.closed_positions.append(position)
+        closed_at = utc_now()
+        is_full_close = close_amount == position.amount_mxn
+        if is_full_close:
+            self.positions.pop(position_id, None)
+            position.status = "closed"
+            position.closed_at = closed_at
+            position.exit_price = price
+            position.exit_fee_mxn = exit_fee
+            position.realized_pnl_mxn = pnl
+            position.close_reason = reason
+            closed_position = position
+        else:
+            closed_position = position.closed_copy(
+                quantity=closed_quantity,
+                amount_mxn=close_amount,
+                entry_fee_mxn=closed_entry_fee,
+                closed_at=closed_at,
+                exit_price=price,
+                exit_fee_mxn=exit_fee,
+                realized_pnl_mxn=pnl,
+                close_reason=reason,
+            )
+            position.quantity -= closed_quantity
+            position.amount_mxn = round_money(position.amount_mxn - close_amount)
+            position.entry_fee_mxn = round_money(
+                position.entry_fee_mxn - closed_entry_fee
+            )
+            position.realized_pnl_mxn = round_money(position.realized_pnl_mxn + pnl)
+        self.closed_positions.append(closed_position)
         trade = PaperTrade(
             id=self._next_id("trd"),
             position_id=position.id,
             book=position.book,
             opened_at=position.opened_at,
-            closed_at=position.closed_at,
+            closed_at=closed_at,
             entry_price=position.entry_price,
             exit_price=price,
-            quantity=position.quantity,
+            quantity=closed_quantity,
             pnl_mxn=pnl,
-            fees_mxn=round_money(position.entry_fee_mxn + exit_fee),
+            fees_mxn=round_money(closed_entry_fee + exit_fee),
             reason=reason,
         )
         self.trades.append(trade)
@@ -171,8 +207,8 @@ class PortfolioManager:
                 position.book,
                 "sell",
                 "filled",
-                position.amount_mxn,
-                position.quantity,
+                close_amount,
+                closed_quantity,
                 price,
                 reason=reason,
             )

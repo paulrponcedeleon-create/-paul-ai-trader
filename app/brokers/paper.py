@@ -33,7 +33,9 @@ class PaperBroker(BrokerInterface):
         self.connected = False
         self._last_prices: dict[str, Decimal] = {}
         self.stop_loss_pct = to_decimal(getattr(settings, "paper_stop_loss_pct", 3.0))
-        self.take_profit_pct = to_decimal(getattr(settings, "paper_take_profit_pct", 6.0))
+        self.take_profit_pct = to_decimal(
+            getattr(settings, "paper_take_profit_pct", 6.0)
+        )
         self.trailing_stop_pct = to_decimal(
             getattr(settings, "paper_trailing_stop_pct", 2.0)
         )
@@ -93,9 +95,7 @@ class PaperBroker(BrokerInterface):
 
     def update_market(self, book: str, price: Decimal) -> list[Any]:
         self._last_prices[book] = price
-        return self.engine.portfolio.update_market(
-            {book: price}, fee_rate=Decimal("0")
-        )
+        return self.engine.portfolio.update_market({book: price}, fee_rate=Decimal("0"))
 
     def place_market_buy(
         self, *, book: str, amount_mxn: Decimal, price: Decimal | None = None
@@ -150,6 +150,7 @@ class PaperBroker(BrokerInterface):
                     price=execution_price,
                     fee_rate=Decimal("0"),
                     reason="strategy_sell",
+                    amount_mxn=amount_mxn,
                 )
                 order = self.engine.portfolio.orders[-1]
                 return BrokerOrder(

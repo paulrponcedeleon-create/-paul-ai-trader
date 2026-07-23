@@ -10,6 +10,11 @@
     adaptive: ['/adaptive/status', '#strategiesModule'], validation: ['/validation/status', '#validationModule']
   };
 
+  const setText = (selector, value) => {
+    const node = document.querySelector(selector);
+    if (node) node.textContent = value;
+  };
+
   const text = value => {
     if (value === null || value === undefined || value === '') return 'Todavía no hay información';
     if (typeof value === 'boolean') return value ? 'Sí' : 'No';
@@ -87,6 +92,7 @@
   }
 
   async function loadModule(name) {
+    if (!endpoints[name]) return null;
     const [url, target] = endpoints[name];
     try {
       const response = await fetch(`${url}?ts=${Date.now()}`, {cache: 'no-store'});
@@ -104,16 +110,16 @@
     loadModule('analytics');
     const databaseOk = readiness?.checks?.database?.ok;
     const missingTables = readiness?.checks?.required_tables?.missing || [];
-    document.querySelector('#statusRuntime').textContent = runtime?.running ? 'Analizando automáticamente' : 'Iniciando simulación';
-    document.querySelector('#statusMarket').textContent = health ? 'Precios conectados' : 'Sin respuesta';
-    document.querySelector('#statusDatabase').textContent = databaseOk === true ? 'Conectada' : databaseOk === false ? (missingTables.length ? 'Faltan tablas' : 'No disponible') : 'Sin confirmar';
+    setText('#statusRuntime', runtime?.running ? 'Analizando automáticamente' : 'Iniciando simulación');
+    setText('#statusMarket', health ? 'Precios conectados' : 'Sin respuesta');
+    setText('#statusDatabase', databaseOk === true ? 'Conectada' : databaseOk === false ? (missingTables.length ? 'Faltan tablas' : 'No disponible') : 'Sin confirmar');
     setDot('#statusRuntimeDot', Boolean(runtime?.running)); setDot('#statusMarketDot', Boolean(health)); setDot('#statusDatabaseDot', databaseOk === true);
-    document.querySelector('#systemLastUpdated').textContent = new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
-    document.querySelector('#overviewPaperState').textContent = runtime?.running ? 'Simulación automática activa' : 'Preparando simulación';
-    document.querySelector('#overviewPaperDetail').textContent = 'El sistema analiza precios y puede abrir o cerrar operaciones con dinero simulado.';
-    document.querySelector('#overviewStrategyState').textContent = runtime?.last_decision?.action ? `Última decisión: ${String(runtime.last_decision.action).toUpperCase()}` : 'Recopilando datos';
-    document.querySelector('#overviewValidationState').textContent = validation?.status === 'idle' ? 'Aprendiendo del historial' : text(validation?.status);
-    document.querySelector('#overviewValidationDetail').textContent = 'Las estrategias se evaluarán cuando exista suficiente historial de operaciones.';
+    setText('#systemLastUpdated', new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit', second: '2-digit'}));
+    setText('#overviewPaperState', runtime?.running ? 'Simulación automática activa' : 'Preparando simulación');
+    setText('#overviewPaperDetail', 'El sistema analiza precios y puede abrir o cerrar operaciones con dinero simulado.');
+    setText('#overviewStrategyState', runtime?.last_decision?.action ? `Última decisión: ${String(runtime.last_decision.action).toUpperCase()}` : 'Recopilando datos');
+    setText('#overviewValidationState', validation?.status === 'idle' ? 'Aprendiendo del historial' : text(validation?.status));
+    setText('#overviewValidationDetail', 'Las estrategias se evaluarán cuando exista suficiente historial de operaciones.');
   }
 
   tabs.forEach(tab => tab.addEventListener('click', () => {

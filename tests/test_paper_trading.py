@@ -61,6 +61,34 @@ def test_portfolio_opens_closes_tracks_pnl_fees_and_drawdown():
     assert portfolio.realized_pnl_mxn == Decimal("7.90")
 
 
+def test_portfolio_supports_partial_position_closes():
+    portfolio = PortfolioManager(initial_cash_mxn=1000)
+    position = portfolio.open_position(
+        book="btc_mxn",
+        price=Decimal("100"),
+        amount_mxn=Decimal("200"),
+        fee_rate=Decimal("0"),
+    )
+    assert position is not None
+
+    trade = portfolio.close_position(
+        position.id,
+        price=Decimal("120"),
+        fee_rate=Decimal("0"),
+        reason="manual_partial_close",
+        amount_mxn=Decimal("50"),
+    )
+
+    assert trade is not None
+    assert trade.quantity == Decimal("0.50")
+    assert trade.pnl_mxn == Decimal("10.00")
+    assert portfolio.positions[position.id].amount_mxn == Decimal("150.00")
+    assert portfolio.positions[position.id].quantity == Decimal("1.50")
+    assert portfolio.closed_positions[-1].amount_mxn == Decimal("50.00")
+    assert portfolio.closed_positions[-1].status == "closed"
+    assert portfolio.realized_pnl_mxn == Decimal("10.00")
+
+
 def test_position_management_stop_take_profit_trailing_and_expiration():
     portfolio = PortfolioManager(initial_cash_mxn=1000)
     stop = portfolio.open_position(
