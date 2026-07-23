@@ -22,8 +22,9 @@ VERIFIED_RUNTIME_BOOKS = (
 @router.post("/runtime/start")
 async def runtime_start(request: Request):
     runtime = _runtime(request)
+    status = runtime.status() if runtime.running else await runtime.start()
     _ensure_background_loop(request, runtime)
-    return (await runtime.start()).to_public_dict()
+    return status.to_public_dict()
 
 
 @router.post("/runtime/stop")
@@ -83,7 +84,6 @@ async def runtime_config(request: Request):
 
 
 async def _background_loop(runtime: RuntimeEngine) -> None:
-    await runtime.start()
     while True:
         await runtime.run_once()
         await asyncio.sleep(max(runtime.config.loop_interval_seconds, 5.0))
