@@ -31,6 +31,7 @@ class _RuntimeProbe:
         self.running = False
         self.status_calls = 0
         self.start_calls = 0
+        self.stop_calls = 0
         self.run_once_calls = 0
 
     def status(self):
@@ -41,6 +42,11 @@ class _RuntimeProbe:
         self.start_calls += 1
         self.running = True
         return _StatusSnapshot(True)
+
+    async def stop(self):
+        self.stop_calls += 1
+        self.running = False
+        return _StatusSnapshot(False)
 
     async def run_once(self):
         self.run_once_calls += 1
@@ -142,3 +148,62 @@ def test_background_loop_does_not_start_runtime_again():
 
     assert runtime.start_calls == 0
     assert runtime.run_once_calls == 1
+
+
+def test_runtime_stop_is_idempotent_and_cancels_background_task():
+    async def scenario():
+        runtime = _RuntimeProbe()
+        runtime.running = True
+        request = _request(runtime, auto_start=True)
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def background():
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        task = asyncio.create_task(background(), name="runtime-stop-test")
+        request.app.state.runtime_background_task = task
+        await started.wait()
+
+        first = await runtime_routes.runtime_stop(request)
+        second = await runtime_routes.runtime_stop(request)
+        return runtime, request, task, cancelled.is_set(), first, second
+
+    runtime, request, task, cancelled, first, second = asyncio.run(scenario())
+
+    assert first["running"] is False
+    assert second["running"] is False
+    assert runtime.stop_calls == 1
+    assert runtime.status_calls == 1
+    assert cancelled is True
+    assert task.cancelled() is True
+    assert request.app.state.runtime_background_task is None
+
+
+def test_runtime_stop_still_disconnects_after_background_task_failure():
+    async def scenario():
+        runtime = _RuntimeProbe()
+        runtime.running = True
+        request = _request(runtime, auto_start=True)
+
+        async def failed_background():
+            raise RuntimeError("background failed")
+
+        task = asyncio.create_task(failed_background())
+        await asyncio.sleep(0)
+        request.app.state.runtime_background_task = task
+
+        payload = await runtime_routes.runtime_stop(request)
+        return runtime, request, task, payload
+
+    runtime, request, task, payload = asyncio.run(scenario())
+
+    assert task.done() is True
+    assert payload["running"] is False
+    assert runtime.stop_calls == 1
+    assert request.app.state.runtime_background_task is None
