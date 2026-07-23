@@ -90,6 +90,12 @@ jobs:
               row[1]
               for row in connection.execute("PRAGMA table_info(simulated_orders)")
           }
+          order_event_columns = {
+              row[1]
+              for row in connection.execute(
+                  "PRAGMA table_info(simulated_order_events)"
+              )
+          }
           revision = connection.execute(
               "SELECT version_num FROM alembic_version"
           ).fetchone()
@@ -97,6 +103,7 @@ jobs:
 
           assert "alembic_version" in tables
           assert "simulated_orders" in tables
+          assert "simulated_order_events" in tables
           assert "backtest_runs" in tables
           assert "optimization_runs" in tables
           assert "paper_accounts" in tables
@@ -105,6 +112,10 @@ jobs:
           assert "ix_simulated_orders_book" in indexes
           assert "ix_simulated_orders_correlation_id" in indexes
           assert "ix_simulated_orders_status" in indexes
+          assert "ix_simulated_order_events_created_at" in indexes
+          assert "ix_simulated_order_events_position_id" in indexes
+          assert "ix_simulated_order_events_side" in indexes
+          assert "ix_simulated_order_events_source" in indexes
           assert "ix_analytics_snapshots_created_at" in indexes
           assert "ix_analytics_events_timestamp" in indexes
           assert {
@@ -116,5 +127,18 @@ jobs:
               "exit_fee_rate",
               "exit_fee_mxn",
           }.issubset(columns)
-          assert revision == ("20260722_0007",)
+          assert {
+              "position_id",
+              "book",
+              "side",
+              "status",
+              "amount_mxn",
+              "price",
+              "fee_mxn",
+              "realized_pnl_mxn",
+              "source",
+              "reason",
+              "correlation_id",
+          }.issubset(order_event_columns)
+          assert revision == ("20260723_0008",)
           PY
