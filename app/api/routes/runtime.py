@@ -4,7 +4,7 @@ import asyncio
 from contextlib import suppress
 from decimal import Decimal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, FastAPI, Request
 
 from app.runtime import RuntimeConfig, RuntimeEngine
 
@@ -80,6 +80,14 @@ async def runtime_config(request: Request):
     return _runtime(request).config.to_public_dict()
 
 
+async def shutdown_runtime(application: FastAPI) -> None:
+    """Cancel Runtime background work and disconnect an existing Runtime engine."""
+    await _cancel_background_task(application)
+    runtime = getattr(application.state, "runtime_engine", None)
+    if runtime is not None and runtime.running:
+        await runtime.stop()
+
+
 async def _background_loop(runtime: RuntimeEngine) -> None:
     while True:
         await runtime.run_once()
@@ -87,8 +95,12 @@ async def _background_loop(runtime: RuntimeEngine) -> None:
 
 
 async def _cancel_background_loop(request: Request) -> None:
-    task = getattr(request.app.state, "runtime_background_task", None)
-    request.app.state.runtime_background_task = None
+    await _cancel_background_task(request.app)
+
+
+async def _cancel_background_task(application: FastAPI) -> None:
+    task = getattr(application.state, "runtime_background_task", None)
+    application.state.runtime_background_task = None
     if task is None:
         return
     if not task.done():
