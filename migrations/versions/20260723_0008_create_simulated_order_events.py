@@ -60,6 +60,83 @@ def upgrade() -> None:
         "simulated_order_events",
         ["correlation_id"],
     )
+    _backfill_existing_simulations()
+
+
+def _backfill_existing_simulations() -> None:
+    connection = op.get_bind()
+    simulations = sa.table(
+        "simulated_orders",
+        sa.column("id", sa.String()),
+        sa.column("created_at", sa.DateTime(timezone=True)),
+        sa.column("closed_at", sa.DateTime(timezone=True)),
+        sa.column("book", sa.String()),
+        sa.column("amount_mxn", sa.Float()),
+        sa.column("reference_price", sa.Float()),
+        sa.column("close_price", sa.Float()),
+        sa.column("entry_fee_mxn", sa.Float()),
+        sa.column("exit_fee_mxn", sa.Float()),
+        sa.column("realized_pnl_mxn", sa.Float()),
+        sa.column("status", sa.String()),
+        sa.column("correlation_id", sa.String()),
+    )
+    events = sa.table(
+        "simulated_order_events",
+        sa.column("id", sa.String()),
+        sa.column("created_at", sa.DateTime(timezone=True)),
+        sa.column("position_id", sa.String()),
+        sa.column("book", sa.String()),
+        sa.column("side", sa.String()),
+        sa.column("status", sa.String()),
+        sa.column("amount_mxn", sa.Float()),
+        sa.column("price", sa.Float()),
+        sa.column("fee_mxn", sa.Float()),
+        sa.column("realized_pnl_mxn", sa.Float()),
+        sa.column("source", sa.String()),
+        sa.column("reason", sa.String()),
+        sa.column("correlation_id", sa.String()),
+    )
+    rows = connection.execute(sa.select(simulations)).mappings().all()
+    payloads: list[dict[str, object]] = []
+    for row in rows:
+        position_id = str(row["id"])
+        payloads.append(
+            {
+                "id": f"b_{position_id}",
+                "created_at": row["created_at"],
+                "position_id": position_id,
+                "book": row["book"],
+                "side": "buy",
+                "status": "filled",
+                "amount_mxn": row["amount_mxn"],
+                "price": row["reference_price"],
+                "fee_mxn": row["entry_fee_mxn"],
+                "realized_pnl_mxn": None,
+                "source": "history",
+                "reason": "historical_buy",
+                "correlation_id": row["correlation_id"],
+            }
+        )
+        if row["status"] == "closed" and row["closed_at"] is not None:
+            payloads.append(
+                {
+                    "id": f"s_{position_id}",
+                    "created_at": row["closed_at"],
+                    "position_id": position_id,
+                    "book": row["book"],
+                    "side": "sell",
+                    "status": "filled",
+                    "amount_mxn": row["amount_mxn"],
+                    "price": row["close_price"],
+                    "fee_mxn": row["exit_fee_mxn"],
+                    "realized_pnl_mxn": row["realized_pnl_mxn"],
+                    "source": "history",
+                    "reason": "historical_close",
+                    "correlation_id": row["correlation_id"],
+                }
+            )
+    if payloads:
+        connection.execute(sa.insert(events), payloads)
 
 
 def downgrade() -> None:
