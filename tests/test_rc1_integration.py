@@ -33,7 +33,10 @@ class LocalSettings:
     app_env = "test"
     app_password = "test-password"
     session_secret = "test-session-secret-with-more-than-32-characters"
+    session_cookie_name = "rc1_test_session"
     session_cookie_secure = False
+    session_cookie_samesite = "lax"
+    session_max_age_seconds = 60 * 60
     live_trading = False
     allowed_books_set = {"btc_mxn"}
     max_order_mxn = 500.0
@@ -43,6 +46,10 @@ class LocalSettings:
         self.resolved_paul_data_dir = (tmp_path / "data").resolve()
         self.paul_data_dir = str(tmp_path / "data")
         self.database_url = f"sqlite:///{tmp_path / 'rc1.db'}"
+
+    @property
+    def resolved_session_cookie_secure(self):
+        return bool(self.session_cookie_secure)
 
 
 def _settings(tmp_path):
