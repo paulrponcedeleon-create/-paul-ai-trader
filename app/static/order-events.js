@@ -21,7 +21,8 @@
   const sourceLabel = source => ({
     manual: "Manual",
     runtime: "Bot automático",
-    automatic_exit: "Salida automática"
+    automatic_exit: "Salida automática",
+    history: "Histórico migrado"
   }[source] || source || "Sistema");
 
   const reasonLabel = reason => ({
@@ -31,7 +32,9 @@
     stop_loss: "Stop-loss",
     take_profit: "Take-profit",
     trailing_stop: "Trailing stop",
-    expired: "Expiración"
+    expired: "Expiración",
+    historical_buy: "Compra histórica",
+    historical_close: "Venta histórica"
   }[reason] || reason || "Ejecución simulada");
 
   const pnlClass = value => {
