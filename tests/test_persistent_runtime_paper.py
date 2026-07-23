@@ -152,7 +152,7 @@ def test_runtime_route_uses_persistent_paper_broker(tmp_path, fake_bitso):
     with TestClient(application) as client:
         response = client.get("/runtime/status")
         assert response.status_code == 200
-        assert response.json()["broker_label"] == "Dinero simulado persistente"
+        assert response.json()["broker_label"] == "Dinero simulado"
         assert isinstance(
             application.state.runtime_engine.broker,
             PersistentPaperBroker,
