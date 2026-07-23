@@ -17,7 +17,7 @@ from app.ai.decision_engine import (
 from app.analytics import AnalyticsService
 from app.brokers.execution import ExecutionEngine, ExecutionRequest
 from app.brokers.factory import BrokerFactory
-from app.brokers.interface import BrokerInterface
+from app.brokers.interface import BrokerInterface, BrokerOrder
 from app.market_data import MarketDataProvider, ProviderFactory
 from app.paper_trading.risk import RiskLimits, RiskManager
 from app.services.backtest_metrics import round_money, to_decimal
@@ -366,6 +366,26 @@ class RuntimeEngine:
             },
         }
 
+    def _record_rejected_order(
+        self,
+        *,
+        book: str,
+        side: str,
+        amount_mxn: Decimal,
+        price: Decimal,
+        reason: str,
+    ) -> None:
+        self.last_order = BrokerOrder(
+            id=f"runtime-risk-{self.cycles + 1}-{book}",
+            book=book,
+            side=side,
+            type="market",
+            status="rejected",
+            amount_mxn=amount_mxn,
+            price=price,
+            reason=reason,
+        ).to_public_dict()
+
     async def _process_book(self, book: str) -> None:
         rows = self.history.setdefault(book, [])
         requested = self.config.max_history if not rows else 1
@@ -448,9 +468,15 @@ class RuntimeEngine:
             if decision.action == "buy" and has_book_position:
                 return
             if decision.action == "buy" and dynamic_amount <= 0:
-                self.system.events.publish(
-                    "INFO", "Risk", "runtime", "Reserva de capital protegida."
+                reason = "Reserva de capital protegida."
+                self._record_rejected_order(
+                    book=book,
+                    side=decision.action,
+                    amount_mxn=dynamic_amount,
+                    price=price,
+                    reason=reason,
                 )
+                self.system.events.publish("INFO", "Risk", "runtime", reason)
                 return
             asset_exposure = sum(
                 (
@@ -491,7 +517,24 @@ class RuntimeEngine:
                     )
                 )
             else:
-                self.system.events.publish("WARNING", "Risk", "runtime", risk.reason)
+                self._record_rejected_order(
+                    book=book,
+                    side=decision.action,
+                    amount_mxn=amount,
+                    price=price,
+                    reason=risk.reason,
+                )
+                self.system.events.publish(
+                    "WARNING",
+                    "Risk",
+                    "runtime",
+                    risk.reason,
+                    {
+                        "book": book,
+                        "side": decision.action,
+                        "amount_mxn": float(amount),
+                    },
+                )
         if order is not None:
             self.last_order = order.to_public_dict()
         self.system.events.publish(
