@@ -20,8 +20,9 @@ def test_dashboard_behavior_remains_available(client: TestClient):
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Panel de inversión" in response.text
-    assert "SIMULACIÓN" in response.text
+    assert "Centro de control" in response.text
+    assert "APRENDIZAJE ACELERADO" in response.text
+    assert "DINERO REAL ACTIVO" not in response.text
 
 
 def test_simulation_mode_never_calls_real_bitso_order(
