@@ -153,14 +153,18 @@ def test_live_simulated_position_tracks_fees_and_closes_net_pnl(client, fake_bit
     assert position["return_pct"] == 8.2907
     assert position["estimated_exit_fee_mxn"] == 0.85
     assert position["total_estimated_fees_mxn"] == 1.63
-    assert summary == {
-        "open_positions": 1,
-        "invested_mxn": 100.0,
-        "current_value_mxn": 108.29,
-        "unrealized_pnl_mxn": 8.29,
-        "estimated_fees_mxn": 1.63,
-        "return_pct": 8.29,
-    }
+    assert summary["open_positions"] == 1
+    assert summary["invested_mxn"] == 100.0
+    assert summary["current_value_mxn"] == 108.29
+    assert summary["unrealized_pnl_mxn"] == 8.29
+    assert summary["estimated_fees_mxn"] == 1.63
+    assert summary["return_pct"] == 8.29
+    assert summary["initial_capital_mxn"] == 5000.0
+    assert summary["available_cash_mxn"] == 4900.0
+    assert summary["open_invested_mxn"] == 100.0
+    assert summary["realized_pnl_mxn"] == 0.0
+    assert summary["account_equity_before_unrealized_mxn"] == 5000.0
+    assert summary["account_equity_mxn"] == 5008.29
     assert positions.json()["fees_included"] is True
     assert positions.json()["fee_source"] == "bitso_account"
     assert positions.json()["refresh_seconds"] == 5

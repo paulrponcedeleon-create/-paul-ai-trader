@@ -14,7 +14,7 @@ def test_capital_endpoint_and_order_balance(client):
 
     capital = client.get("/api/capital")
     assert capital.status_code == 200
-    assert capital.json()["available_cash_mxn"] == 1000.0
+    assert capital.json()["available_cash_mxn"] == 5000.0
 
     session_factory = client.app.state.db_session_factory
     with session_factory() as session:
@@ -26,7 +26,7 @@ def test_capital_endpoint_and_order_balance(client):
                 "status": "open",
                 "book": "btc_mxn",
                 "side": "buy",
-                "amount_mxn": 900.0,
+                "amount_mxn": 4900.0,
                 "reference_price": 100.0,
                 "entry_fee_rate": 0.0,
                 "entry_fee_mxn": 0.0,
@@ -37,7 +37,7 @@ def test_capital_endpoint_and_order_balance(client):
 
     capital_after = client.get("/api/capital").json()
     assert capital_after["available_cash_mxn"] == 100.0
-    assert capital_after["open_invested_mxn"] == 900.0
+    assert capital_after["open_invested_mxn"] == 4900.0
 
     blocked = client.post(
         "/api/orders",
@@ -54,7 +54,7 @@ def test_simulated_spot_rejects_new_sell_orders(client):
         json={"book": "btc_mxn", "side": "sell", "amount_mxn": 100},
     )
     assert response.status_code == 403
-    assert "solo puedes comprar" in response.json()["detail"]
+    assert "no puedes vender un activo que no tienes" in response.json()["detail"]
 
 
 def test_closed_result_returns_principal_and_applies_realized_pnl(client):

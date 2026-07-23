@@ -9,6 +9,7 @@
   const REQUEST_TIMEOUT_MS = 15000;
   const CRYPTO_REFRESH_MS = 15000;
   const STOCK_REFRESH_MS = 60000;
+  const CARD_AGE_REFRESH_MS = 5000;
   const rfqBooks = new Set(['atom_mxn', 'paxg_mxn', 'usdc_mxn']);
   let typeFilter = 'all';
   let signalFilter = 'all';
@@ -167,11 +168,6 @@
     loadBook(card.dataset.book);
   });
 
-  document.querySelector('#refreshBtn')?.addEventListener('click', () => {
-    refreshByType('market');
-    refreshByType('stock');
-  });
-
   restoreCache();
   cards.forEach(card => updateCard(card.dataset.book));
   applyFilters();
@@ -179,5 +175,5 @@
   refreshByType('stock');
   window.setInterval(() => refreshByType('market'), CRYPTO_REFRESH_MS);
   window.setInterval(() => refreshByType('stock'), STOCK_REFRESH_MS);
-  window.setInterval(() => cards.forEach(card => updateCard(card.dataset.book)), 5000);
+  window.setInterval(() => cards.forEach(card => updateCard(card.dataset.book)), CARD_AGE_REFRESH_MS);
 })();

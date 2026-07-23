@@ -1,4 +1,4 @@
-def test_dashboard_renders_fixed_asset_order_filters_and_new_assets(client):
+def test_dashboard_renders_verified_assets_filters_and_auto_refresh(client):
     client.post("/api/login", json={"password": "test-password"})
 
     response = client.get("/")
@@ -8,34 +8,31 @@ def test_dashboard_renders_fixed_asset_order_filters_and_new_assets(client):
     assert "/static/market-panel-v2.css" in html
     assert "/static/market-panel-v2.js" in html
     assert 'id="marketFiltersV2"' in html
-    assert "Cripto y monedas" in html
+    assert ">Cripto<" in html
     assert ">Comprar<" in html
     assert ">Mantener<" in html
-    assert ">Vender<" in html
+    assert ">Vender si tienes<" in html
+    assert 'id="refreshBtn"' not in html
+    assert "Actualización automática" in html
 
     market_html = html.split('id="marketGridV2"', 1)[1].split('id="marketResult"', 1)[0]
     expected = [
         ">BTC<",
         ">ETH<",
         ">SOL<",
-        ">ATOM<",
-        ">MXN<",
-        ">USD<",
         ">USDT<",
-        ">PAXG<",
         ">XRP<",
         ">ALGN<",
-        ">PSTG<",
         ">TSLA<",
         ">AAPL<",
     ]
     positions = [market_html.index(symbol) for symbol in expected]
     assert positions == sorted(positions)
-    assert "AAPL_MXN" not in market_html
-    assert "ALGN_MXN" not in market_html
+    for removed in (">ATOM<", ">MXN<", ">USD<", ">PAXG<", ">PSTG<"):
+        assert removed not in market_html
 
 
-def test_new_visual_assets_define_full_card_and_portfolio_colors(client):
+def test_new_visual_assets_define_full_card_portfolio_colors_and_refresh_intervals(client):
     css = client.get("/static/market-panel-v2.css")
     javascript = client.get("/static/market-panel-v2.js")
 
@@ -48,3 +45,7 @@ def test_new_visual_assets_define_full_card_and_portfolio_colors(client):
     assert ".position-row:has(.compact-result .positive)" in css.text
     assert "marketFiltersV2" in javascript.text
     assert "marketGridV2" in javascript.text
+    assert "const CRYPTO_REFRESH_MS = 15000" in javascript.text
+    assert "const STOCK_REFRESH_MS = 60000" in javascript.text
+    assert "const CARD_AGE_REFRESH_MS = 5000" in javascript.text
+    assert "refreshBtn" not in javascript.text
