@@ -40,16 +40,33 @@ async def runtime_stop(request: Request):
 @router.get("/runtime/status")
 async def runtime_status(request: Request):
     runtime = _runtime(request)
-    _ensure_background_loop(request, runtime)
     payload = runtime.status().to_public_dict()
     payload.update(
         {
-            "automatic": bool(getattr(request.app.state.settings, "runtime_auto_start", True)),
-            "mode_label": "Simulación automática" if not request.app.state.settings.live_trading else "Dinero real",
-            "provider_label": "Bitso, solo lectura" if runtime.config.market_data_provider == "bitso" else runtime.config.market_data_provider,
-            "broker_label": "Dinero simulado" if runtime.config.broker_name == "paper" else runtime.config.broker_name,
-            "risk_label": "Protección automática: pérdida 3%, objetivo 6% y seguimiento 2%",
-            "history_label": f"{payload.get('history_points', 0)} datos cargados para análisis",
+            "automatic": bool(
+                getattr(request.app.state.settings, "runtime_auto_start", True)
+            ),
+            "mode_label": (
+                "Simulación automática"
+                if not request.app.state.settings.live_trading
+                else "Dinero real"
+            ),
+            "provider_label": (
+                "Bitso, solo lectura"
+                if runtime.config.market_data_provider == "bitso"
+                else runtime.config.market_data_provider
+            ),
+            "broker_label": (
+                "Dinero simulado"
+                if runtime.config.broker_name == "paper"
+                else runtime.config.broker_name
+            ),
+            "risk_label": (
+                "Protección automática: pérdida 3%, objetivo 6% y seguimiento 2%"
+            ),
+            "history_label": (
+                f"{payload.get('history_points', 0)} datos cargados para análisis"
+            ),
         }
     )
     return payload
