@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -51,7 +52,18 @@ def create_app(
     if current_settings.app_env == "test":
         Base.metadata.create_all(bind=engine)
 
-    application = FastAPI(title=current_settings.app_name, version="1.0.0")
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        try:
+            yield
+        finally:
+            engine.dispose()
+
+    application = FastAPI(
+        title=current_settings.app_name,
+        version="1.0.0",
+        lifespan=lifespan,
+    )
     application.add_middleware(
         SessionMiddleware,
         secret_key=current_settings.session_secret,
@@ -95,10 +107,6 @@ def create_app(
             "max_order": current_settings.max_order_mxn,
             "allowed_books": sorted(current_settings.allowed_books_set),
         }
-
-    @application.on_event("shutdown")
-    def dispose_database_engine() -> None:
-        engine.dispose()
 
     @application.get("/health")
     async def health() -> dict:
