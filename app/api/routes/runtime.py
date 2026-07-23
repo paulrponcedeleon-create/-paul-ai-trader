@@ -56,7 +56,7 @@ async def runtime_status(request: Request):
                 else runtime.config.market_data_provider
             ),
             "broker_label": (
-                "Dinero simulado persistente"
+                "Dinero simulado"
                 if runtime.config.broker_name == "paper"
                 else runtime.config.broker_name
             ),
