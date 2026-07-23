@@ -10,28 +10,22 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
-from app.services.unified_markets import UnifiedMarketService
-from tests.conftest import FakeBitsoClient, FakeStockQuoteClient
+from tests.conftest import FakeBitsoClient
 
 
 EXPECTED_SYMBOLS = [
     "BTC",
     "ETH",
     "SOL",
-    "ATOM",
-    "MXN",
-    "USD",
     "USDT",
-    "PAXG",
     "XRP",
     "ALGN",
-    "PSTG",
     "TSLA",
     "AAPL",
 ]
 
 
-def test_curated_market_catalog_has_visual_signals_and_exact_assets(client):
+def test_curated_market_catalog_has_visual_signals_and_verified_assets(client):
     assert client.get("/api/markets").status_code == 401
     client.post("/api/login", json={"password": "test-password"})
 
@@ -39,35 +33,25 @@ def test_curated_market_catalog_has_visual_signals_and_exact_assets(client):
 
     assert response.status_code == 200
     data = response.json()
-    assert data["count"] == 13
+    assert data["count"] == len(EXPECTED_SYMBOLS)
     assert [item["symbol"] for item in data["items"]] == EXPECTED_SYMBOLS
 
     actions = {item["symbol"]: item["signal"]["action"] for item in data["items"]}
     assert actions["BTC"] == "buy"
     assert actions["SOL"] == "sell"
     assert actions["ETH"] == "hold"
-    assert actions["ATOM"] == "hold"
-    assert actions["PAXG"] == "hold"
-    assert actions["MXN"] == "hold"
     assert actions["ALGN"] == "buy"
     assert actions["TSLA"] == "sell"
 
     by_symbol = {item["symbol"]: item for item in data["items"]}
     assert by_symbol["BTC"]["effective_fee_percent"] == 0.78
-    assert by_symbol["USD"]["effective_fee_percent"] == 0.36
+    assert by_symbol["USDT"]["effective_fee_percent"] == 0.36
     assert by_symbol["ALGN"]["effective_fee_percent"] == 0.0
-    assert by_symbol["PSTG"]["name"] == "Everpure, Inc."
-    assert by_symbol["MXN"]["tradeable"] is False
+    assert by_symbol["ALGN"]["asset_type"] == "stock"
+    assert by_symbol["ALGN"]["tradeable"] is True
 
-    assert by_symbol["ATOM"]["available"] is True
-    assert by_symbol["ATOM"]["tradeable"] is True
-    assert by_symbol["ATOM"]["source"] == "bitso_rfq"
-    assert by_symbol["ATOM"]["fee_included_in_quote"] is True
-    assert by_symbol["ATOM"]["route_label"] == "Conversión Bitso App · MXN → ATOM"
-
-    assert by_symbol["PAXG"]["available"] is True
-    assert by_symbol["PAXG"]["source"] == "bitso_rfq"
-    assert by_symbol["PAXG"]["route_label"] == "Conversión Bitso App · MXN → PAXG"
+    for removed in {"ATOM", "MXN", "USD", "PAXG", "PSTG"}:
+        assert removed not in by_symbol
 
 
 def test_curated_catalog_uses_short_server_cache(client, fake_bitso):
@@ -93,58 +77,40 @@ def test_curated_catalog_uses_short_server_cache(client, fake_bitso):
     )
 
 
-def test_atom_simulation_uses_bitso_app_buy_and_sell_quotes(client):
+def test_removed_rfq_asset_is_blocked_from_new_simulations(client):
     client.post("/api/login", json={"password": "test-password"})
 
     opened = client.post(
         "/api/orders",
         json={"book": "atom_mxn", "side": "buy", "amount_mxn": 100},
     )
-    positions = client.get("/api/positions")
 
-    assert opened.status_code == 200
-    opened_data = opened.json()
-    assert opened_data["symbol"] == "ATOM"
-    assert opened_data["reference_price"] == 90.0
-    assert opened_data["entry_fee_mxn"] == 0.0
-    assert opened_data["fee_included_in_quote"] is True
-    assert opened_data["route_label"] == "Conversión Bitso App · MXN → ATOM"
-
-    assert positions.status_code == 200
-    item = positions.json()["items"][0]
-    assert item["symbol"] == "ATOM"
-    assert item["current_price"] == 89.1
-    assert item["current_value_mxn"] == 99.0
-    assert item["unrealized_pnl_mxn"] == -1.0
-    assert item["total_estimated_fees_mxn"] == 0.0
-    assert item["fee_included_in_quote"] is True
-    assert item["route_label"] == "Conversión Bitso App · ATOM → MXN"
+    assert opened.status_code == 403
+    assert "Mercado no autorizado" in opened.json()["detail"]
 
 
-def test_stock_simulation_uses_mxn_reference_and_zero_trading_fee(client):
+def test_verified_stock_simulation_uses_reference_and_zero_trading_fee(client):
     client.post("/api/login", json={"password": "test-password"})
 
     opened = client.post(
         "/api/orders",
-        json={"book": "pstg_mxn", "side": "buy", "amount_mxn": 100},
+        json={"book": "algn_mxn", "side": "buy", "amount_mxn": 100},
     )
     positions = client.get("/api/positions")
 
     assert opened.status_code == 200
-    assert opened.json()["symbol"] == "PSTG"
-    assert opened.json()["name"] == "Everpure, Inc."
-    assert opened.json()["reference_price"] == 1260.0
+    assert opened.json()["symbol"] == "ALGN"
+    assert opened.json()["name"] == "Align Technology"
     assert opened.json()["entry_fee_mxn"] == 0.0
 
     assert positions.status_code == 200
     item = positions.json()["items"][0]
-    assert item["symbol"] == "PSTG"
+    assert item["symbol"] == "ALGN"
     assert item["asset_type"] == "stock"
-    assert item["current_value_mxn"] == 100.0
     assert item["total_estimated_fees_mxn"] == 0.0
 
 
-def test_curated_extra_assets_are_simulation_only(tmp_path: Path):
+def test_allowed_books_are_restricted_in_simulation_and_live(tmp_path: Path):
     simulation_settings = Settings(
         _env_file=None,
         app_env="test",
@@ -154,8 +120,9 @@ def test_curated_extra_assets_are_simulation_only(tmp_path: Path):
         live_trading=False,
         database_url=f"sqlite:///{tmp_path / 'simulation.db'}",
     )
-    assert "pstg_mxn" in simulation_settings.allowed_books_set
-    assert "atom_mxn" in simulation_settings.allowed_books_set
+    assert "algn_mxn" in simulation_settings.allowed_books_set
+    assert "atom_mxn" not in simulation_settings.allowed_books_set
+    assert "pstg_mxn" not in simulation_settings.allowed_books_set
 
     live_settings = Settings(
         _env_file=None,
@@ -167,16 +134,15 @@ def test_curated_extra_assets_are_simulation_only(tmp_path: Path):
         database_url=f"sqlite:///{tmp_path / 'live.db'}",
         allowed_books="btc_mxn,eth_mxn,xrp_mxn,sol_mxn",
     )
-    assert "pstg_mxn" not in live_settings.allowed_books_set
+    assert "algn_mxn" not in live_settings.allowed_books_set
 
     fake_bitso = FakeBitsoClient()
     app = create_app(live_settings, fake_bitso)
-    app.state.unified_markets = UnifiedMarketService(fake_bitso, FakeStockQuoteClient())
     with TestClient(app) as live_client:
         live_client.post("/api/login", json={"password": "test-password"})
         blocked = live_client.post(
             "/api/orders",
-            json={"book": "pstg_mxn", "side": "buy", "amount_mxn": 100},
+            json={"book": "algn_mxn", "side": "buy", "amount_mxn": 100},
         )
 
     assert blocked.status_code == 403
