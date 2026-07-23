@@ -29,13 +29,10 @@ async def runtime_start(request: Request):
 
 @router.post("/runtime/stop")
 async def runtime_stop(request: Request):
-    task = getattr(request.app.state, "runtime_background_task", None)
-    if task is not None:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-        request.app.state.runtime_background_task = None
-    return (await _runtime(request).stop()).to_public_dict()
+    runtime = _runtime(request)
+    await _cancel_background_loop(request)
+    status = await runtime.stop() if runtime.running else runtime.status()
+    return status.to_public_dict()
 
 
 @router.get("/runtime/status")
@@ -87,6 +84,17 @@ async def _background_loop(runtime: RuntimeEngine) -> None:
     while True:
         await runtime.run_once()
         await asyncio.sleep(max(runtime.config.loop_interval_seconds, 5.0))
+
+
+async def _cancel_background_loop(request: Request) -> None:
+    task = getattr(request.app.state, "runtime_background_task", None)
+    request.app.state.runtime_background_task = None
+    if task is None:
+        return
+    if not task.done():
+        task.cancel()
+    with suppress(asyncio.CancelledError, Exception):
+        await task
 
 
 def _ensure_background_loop(request: Request, runtime: RuntimeEngine) -> None:
