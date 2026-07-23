@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import SimulatedOrder
+from app.services.money import (
+    public_money,
+    quantize_money,
+    quantize_price,
+    quantize_rate,
+    to_decimal,
+)
 
 
 class SqlSimulatedOrderRepository:
@@ -57,29 +65,38 @@ class SqlSimulatedOrderRepository:
         ).all()
         return [row.to_dict() for row in rows]
 
-    def capital_ledger(self, initial_capital_mxn: float) -> dict[str, float]:
+    def capital_ledger_decimal(self, initial_capital_mxn: Any) -> dict[str, Decimal]:
         open_invested = self.session.scalar(
-            select(func.coalesce(func.sum(SimulatedOrder.amount_mxn), 0.0)).where(
-                SimulatedOrder.status == "open"
-            )
+            select(
+                func.coalesce(func.sum(SimulatedOrder.amount_mxn), Decimal("0.00"))
+            ).where(SimulatedOrder.status == "open")
         )
         realized_pnl = self.session.scalar(
-            select(func.coalesce(func.sum(SimulatedOrder.realized_pnl_mxn), 0.0)).where(
+            select(
+                func.coalesce(
+                    func.sum(SimulatedOrder.realized_pnl_mxn), Decimal("0.00")
+                )
+            ).where(
                 SimulatedOrder.status == "closed",
                 SimulatedOrder.realized_pnl_mxn.is_not(None),
             )
         )
-        initial = float(initial_capital_mxn)
-        invested = float(open_invested or 0.0)
-        realized = float(realized_pnl or 0.0)
-        available = initial + realized - invested
+        initial = quantize_money(initial_capital_mxn)
+        invested = quantize_money(open_invested or Decimal("0"))
+        realized = quantize_money(realized_pnl or Decimal("0"))
+        available = quantize_money(initial + realized - invested)
+        equity_before_unrealized = quantize_money(initial + realized)
         return {
-            "initial_capital_mxn": round(initial, 2),
-            "open_invested_mxn": round(invested, 2),
-            "realized_pnl_mxn": round(realized, 2),
-            "available_cash_mxn": round(max(0.0, available), 2),
-            "account_equity_before_unrealized_mxn": round(initial + realized, 2),
+            "initial_capital_mxn": initial,
+            "open_invested_mxn": invested,
+            "realized_pnl_mxn": realized,
+            "available_cash_mxn": max(Decimal("0.00"), available),
+            "account_equity_before_unrealized_mxn": equity_before_unrealized,
         }
+
+    def capital_ledger(self, initial_capital_mxn: Any) -> dict[str, float]:
+        ledger = self.capital_ledger_decimal(initial_capital_mxn)
+        return {key: float(public_money(value) or 0.0) for key, value in ledger.items()}
 
     def get_open(self, simulation_id: str) -> dict[str, Any] | None:
         row = self.session.get(SimulatedOrder, simulation_id)
@@ -99,14 +116,42 @@ class SqlSimulatedOrderRepository:
             status=str(item.get("status", "simulated")),
             book=str(item["book"]).lower(),
             side=str(item["side"]),
-            amount_mxn=float(item["amount_mxn"]),
-            reference_price=item.get("reference_price"),
-            close_price=item.get("close_price"),
-            entry_fee_rate=item.get("entry_fee_rate"),
-            entry_fee_mxn=item.get("entry_fee_mxn"),
-            exit_fee_rate=item.get("exit_fee_rate"),
-            exit_fee_mxn=item.get("exit_fee_mxn"),
-            realized_pnl_mxn=item.get("realized_pnl_mxn"),
+            amount_mxn=quantize_money(item["amount_mxn"]),
+            reference_price=(
+                quantize_price(item["reference_price"])
+                if item.get("reference_price") is not None
+                else None
+            ),
+            close_price=(
+                quantize_price(item["close_price"])
+                if item.get("close_price") is not None
+                else None
+            ),
+            entry_fee_rate=(
+                quantize_rate(item["entry_fee_rate"])
+                if item.get("entry_fee_rate") is not None
+                else None
+            ),
+            entry_fee_mxn=(
+                quantize_money(item["entry_fee_mxn"])
+                if item.get("entry_fee_mxn") is not None
+                else None
+            ),
+            exit_fee_rate=(
+                quantize_rate(item["exit_fee_rate"])
+                if item.get("exit_fee_rate") is not None
+                else None
+            ),
+            exit_fee_mxn=(
+                quantize_money(item["exit_fee_mxn"])
+                if item.get("exit_fee_mxn") is not None
+                else None
+            ),
+            realized_pnl_mxn=(
+                quantize_money(item["realized_pnl_mxn"])
+                if item.get("realized_pnl_mxn") is not None
+                else None
+            ),
             strategy_version=item.get("strategy_version"),
             signal_id=item.get("signal_id"),
             risk_decision_id=item.get("risk_decision_id"),
@@ -122,10 +167,10 @@ class SqlSimulatedOrderRepository:
         simulation_id: str,
         *,
         closed_at: datetime,
-        close_price: float,
-        exit_fee_rate: float,
-        exit_fee_mxn: float,
-        realized_pnl_mxn: float,
+        close_price: Any,
+        exit_fee_rate: Any,
+        exit_fee_mxn: Any,
+        realized_pnl_mxn: Any,
     ) -> dict[str, Any] | None:
         row = self.session.get(SimulatedOrder, simulation_id)
         if row is None or row.status != "open":
@@ -133,9 +178,9 @@ class SqlSimulatedOrderRepository:
 
         row.status = "closed"
         row.closed_at = closed_at
-        row.close_price = float(close_price)
-        row.exit_fee_rate = float(exit_fee_rate)
-        row.exit_fee_mxn = float(exit_fee_mxn)
-        row.realized_pnl_mxn = float(realized_pnl_mxn)
+        row.close_price = quantize_price(close_price)
+        row.exit_fee_rate = quantize_rate(exit_fee_rate)
+        row.exit_fee_mxn = quantize_money(exit_fee_mxn)
+        row.realized_pnl_mxn = quantize_money(realized_pnl_mxn)
         self.session.flush()
         return row.to_dict()
