@@ -39,6 +39,7 @@ class LocalSettings:
     session_max_age_seconds = 60 * 60
     live_trading = False
     allowed_books_set = {"btc_mxn"}
+    enabled_books_set = allowed_books_set
     max_order_mxn = 500.0
     simulated_initial_capital_mxn = 5000.0
 
