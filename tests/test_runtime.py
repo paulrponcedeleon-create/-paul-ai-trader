@@ -10,6 +10,7 @@ pytestmark = pytest.mark.unit
 
 from app.ai.decision_engine import DecisionExplanation, DecisionResult
 from app.market_data.models import Candle, ProviderStatus
+from app.paper_trading.risk import RiskDecision
 from app.runtime import RuntimeConfig, RuntimeEngine
 from app.services.signals import Signal
 
@@ -81,6 +82,24 @@ class BuyAI:
         )
 
 
+class RejectAllRisk:
+    def __init__(self):
+        self.calls = []
+
+    def evaluate_open(self, **kwargs):
+        self.calls.append(kwargs)
+        return RiskDecision(False, "Bloqueada por política de riesgo de prueba.")
+
+
+class UnexpectedExecution:
+    def __init__(self):
+        self.calls = 0
+
+    def execute(self, request):
+        self.calls += 1
+        raise AssertionError("Una orden rechazada no debe llegar al motor de ejecución.")
+
+
 def test_runtime_cycle_market_strategy_ai_broker_portfolio_system():
     runtime = RuntimeEngine(
         config=RuntimeConfig(
@@ -99,6 +118,36 @@ def test_runtime_cycle_market_strategy_ai_broker_portfolio_system():
     assert len(runtime.history["btc_mxn"]) <= 2
     assert runtime.components()["broker"]["mode"] == "paper"
     assert runtime.system.events.list()
+
+
+def test_runtime_records_risk_rejection_without_calling_execution_or_broker():
+    risk = RejectAllRisk()
+    execution = UnexpectedExecution()
+    runtime = RuntimeEngine(
+        config=RuntimeConfig(books=("btc_mxn",), max_history=2),
+        market_data=FakeProvider(),
+        strategy_factory=FakeStrategyFactory(),
+        ai_engine=BuyAI(),
+        risk_manager=risk,
+        execution_engine=execution,
+    )
+
+    status = asyncio.run(runtime.run_cycles(1))
+
+    assert len(risk.calls) == 1
+    assert execution.calls == 0
+    assert runtime.broker.get_orders() == []
+    assert status.last_order == {
+        "id": "runtime-risk-1-btc_mxn",
+        "book": "btc_mxn",
+        "side": "buy",
+        "type": "market",
+        "status": "rejected",
+        "amount_mxn": 100.0,
+        "price": 101.0,
+        "created_at": None,
+        "reason": "Bloqueada por política de riesgo de prueba.",
+    }
 
 
 def test_runtime_stop_is_clean_and_disconnects_provider():
