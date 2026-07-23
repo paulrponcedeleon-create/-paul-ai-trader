@@ -28,6 +28,8 @@ def test_lifespan_disposes_database_without_on_event_warning(
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         application = create_app(settings, fake_bitso)
+        assert application.router.on_shutdown == []
+
         engine = application.state.db_engine
         disposed = []
         monkeypatch.setattr(
