@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, FastAPI, Request
 
+from app.brokers.persistent_paper import PersistentPaperBroker
 from app.runtime import RuntimeConfig, RuntimeEngine
 
 router = APIRouter(tags=["runtime"])
@@ -138,23 +139,31 @@ def _runtime(request: Request) -> RuntimeEngine:
     runtime = getattr(request.app.state, "runtime_engine", None)
     if runtime is None:
         settings = request.app.state.settings
-        runtime = RuntimeEngine(
-            config=RuntimeConfig(
-                loop_interval_seconds=float(
-                    getattr(settings, "runtime_loop_interval_seconds", 60.0)
-                ),
-                books=_resolved_runtime_books(settings),
-                timeframe=getattr(settings, "runtime_timeframe", "1m"),
-                strategy_name=getattr(settings, "runtime_strategy", "momentum"),
-                trade_amount_mxn=Decimal(
-                    str(getattr(settings, "runtime_trade_amount_mxn", 100))
-                ),
-                market_data_provider=getattr(
-                    settings, "runtime_market_data_provider", "bitso"
-                ),
-                broker_name=getattr(settings, "runtime_broker", "paper"),
-                max_history=int(getattr(settings, "runtime_history_points", 200)),
+        config = RuntimeConfig(
+            loop_interval_seconds=float(
+                getattr(settings, "runtime_loop_interval_seconds", 60.0)
             ),
+            books=_resolved_runtime_books(settings),
+            timeframe=getattr(settings, "runtime_timeframe", "1m"),
+            strategy_name=getattr(settings, "runtime_strategy", "momentum"),
+            trade_amount_mxn=Decimal(
+                str(getattr(settings, "runtime_trade_amount_mxn", 100))
+            ),
+            market_data_provider=getattr(
+                settings, "runtime_market_data_provider", "bitso"
+            ),
+            broker_name=getattr(settings, "runtime_broker", "paper"),
+            max_history=int(getattr(settings, "runtime_history_points", 200)),
+        )
+        broker = None
+        if config.broker_name == "paper":
+            broker = PersistentPaperBroker(
+                session_factory=request.app.state.db_session_factory,
+                settings=settings,
+            )
+        runtime = RuntimeEngine(
+            config=config,
+            broker=broker,
             settings=settings,
         )
         request.app.state.runtime_engine = runtime
