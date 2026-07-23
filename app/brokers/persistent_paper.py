@@ -9,6 +9,7 @@ from app.brokers.interface import BrokerBalance, BrokerOrder
 from app.brokers.paper import PaperBroker
 from app.paper_trading import PaperTradingEngine, PortfolioManager
 from app.paper_trading.models import PaperPosition, PaperTrade
+from app.repositories.order_events import SqlSimulatedOrderEventRepository
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
 from app.services.backtest_metrics import round_money, to_decimal
 
@@ -244,6 +245,7 @@ class PersistentPaperBroker(PaperBroker):
     ) -> None:
         with self.session_factory() as session:
             repository = SqlSimulatedOrderRepository(session)
+            event_repository = SqlSimulatedOrderEventRepository(session)
             repository.add(
                 {
                     "id": position.id,
@@ -257,6 +259,22 @@ class PersistentPaperBroker(PaperBroker):
                     "entry_fee_mxn": float(position.entry_fee_mxn),
                     "correlation_id": correlation_id,
                     "risk_check": "runtime_paper_fill",
+                }
+            )
+            event_repository.add(
+                {
+                    "id": f"evt_{secrets.token_hex(8)}",
+                    "created_at": position.opened_at,
+                    "position_id": position.id,
+                    "book": position.book,
+                    "side": "buy",
+                    "status": "filled",
+                    "amount_mxn": float(position.amount_mxn),
+                    "price": float(position.entry_price),
+                    "fee_mxn": float(position.entry_fee_mxn),
+                    "source": "runtime",
+                    "reason": "strategy_buy",
+                    "correlation_id": correlation_id,
                 }
             )
             session.commit()
@@ -276,8 +294,15 @@ class PersistentPaperBroker(PaperBroker):
             if closed_position is not None
             else Decimal("0")
         )
+        closed_amount = (
+            closed_position.amount_mxn
+            if closed_position is not None
+            else trade.quantity * trade.entry_price
+        )
+        source = "runtime" if trade.reason == "strategy_sell" else "automatic_exit"
         with self.session_factory() as session:
             repository = SqlSimulatedOrderRepository(session)
+            event_repository = SqlSimulatedOrderEventRepository(session)
             repository.close(
                 trade.position_id,
                 closed_at=trade.closed_at,
@@ -285,6 +310,23 @@ class PersistentPaperBroker(PaperBroker):
                 exit_fee_rate=0.0,
                 exit_fee_mxn=float(exit_fee),
                 realized_pnl_mxn=float(trade.pnl_mxn),
+            )
+            event_repository.add(
+                {
+                    "id": f"evt_{secrets.token_hex(8)}",
+                    "created_at": trade.closed_at,
+                    "position_id": trade.position_id,
+                    "book": trade.book,
+                    "side": "sell",
+                    "status": "filled",
+                    "amount_mxn": float(closed_amount),
+                    "price": float(trade.exit_price),
+                    "fee_mxn": float(exit_fee),
+                    "realized_pnl_mxn": float(trade.pnl_mxn),
+                    "source": source,
+                    "reason": trade.reason,
+                    "correlation_id": trade.id,
+                }
             )
             session.commit()
 
