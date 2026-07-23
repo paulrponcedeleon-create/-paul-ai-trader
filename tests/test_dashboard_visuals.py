@@ -47,4 +47,5 @@ def test_new_visual_assets_define_full_card_portfolio_colors_and_refresh_interva
     assert "marketGridV2" in javascript.text
     assert "const CRYPTO_REFRESH_MS = 15000" in javascript.text
     assert "const STOCK_REFRESH_MS = 60000" in javascript.text
-    assert "5000" in javascript.text
+    assert "const CARD_AGE_REFRESH_MS = 5000" in javascript.text
+    assert "refreshBtn" not in javascript.text
