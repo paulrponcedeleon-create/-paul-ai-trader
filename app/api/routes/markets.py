@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 import secrets
 import time
 
@@ -9,6 +10,13 @@ from app.models import SimulatedOrderRequest
 from app.repositories.order_events import SqlSimulatedOrderEventRepository
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
 from app.services.bitso import BitsoError
+from app.services.money import (
+    public_money,
+    quantize_money,
+    quantize_price,
+    quantize_rate,
+    to_decimal,
+)
 from app.services.portfolio import calculate_position, summarize_positions
 from app.services.risk import validate_order
 from app.services.store import add_simulation
@@ -25,6 +33,10 @@ def _market_service(request: Request) -> UnifiedMarketService:
         service = UnifiedMarketService(request.app.state.bitso)
         request.app.state.unified_markets = service
     return service
+
+
+def _public_ledger(ledger: dict[str, Decimal]) -> dict[str, float]:
+    return {key: float(public_money(value) or 0.0) for key, value in ledger.items()}
 
 
 @router.get("/markets")
@@ -112,7 +124,10 @@ async def positions(request: Request, response: Response):
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
         open_orders = repository.list_open()
-        ledger = repository.capital_ledger(settings.simulated_initial_capital_mxn)
+        ledger_decimal = repository.capital_ledger_decimal(
+            settings.simulated_initial_capital_mxn
+        )
+    ledger = _public_ledger(ledger_decimal)
 
     service = _market_service(request)
     items = []
@@ -125,8 +140,8 @@ async def positions(request: Request, response: Response):
         fee_sources.add(str(quote["fee_source"]))
         calculated = calculate_position(
             item,
-            float(quote["last"]),
-            exit_fee_rate=float(quote["effective_fee_rate"]),
+            quote["last"],
+            exit_fee_rate=quote["effective_fee_rate"],
         )
         calculated.update(
             {
@@ -144,8 +159,9 @@ async def positions(request: Request, response: Response):
 
     summary = summarize_positions(items)
     summary.update(ledger)
-    summary["account_equity_mxn"] = round(
-        ledger["available_cash_mxn"] + float(summary["current_value_mxn"]), 2
+    summary["account_equity_mxn"] = public_money(
+        ledger_decimal["available_cash_mxn"]
+        + to_decimal(summary["current_value_mxn"])
     )
     return {
         "items": items,
@@ -176,11 +192,13 @@ async def close_simulation(simulation_id: str, request: Request):
         )
     except (UnifiedMarketError, BitsoError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    exit_fee_rate = float(quote["effective_fee_rate"])
-    close_price = float(quote["last"])
+    exit_fee_rate = quantize_rate(quote["effective_fee_rate"])
+    close_price = quantize_price(quote["last"])
     calculated = calculate_position(
         open_order, close_price, exit_fee_rate=exit_fee_rate
     )
+    exit_fee = quantize_money(calculated["estimated_exit_fee_mxn"])
+    realized_pnl = quantize_money(calculated["unrealized_pnl_mxn"])
     closed_at = datetime.now(timezone.utc)
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
@@ -190,8 +208,8 @@ async def close_simulation(simulation_id: str, request: Request):
             closed_at=closed_at,
             close_price=close_price,
             exit_fee_rate=exit_fee_rate,
-            exit_fee_mxn=float(calculated["estimated_exit_fee_mxn"]),
-            realized_pnl_mxn=float(calculated["unrealized_pnl_mxn"]),
+            exit_fee_mxn=exit_fee,
+            realized_pnl_mxn=realized_pnl,
         )
         if closed is None:
             raise HTTPException(status_code=409, detail="La posición ya fue cerrada.")
@@ -205,8 +223,8 @@ async def close_simulation(simulation_id: str, request: Request):
                 "status": "filled",
                 "amount_mxn": open_order["amount_mxn"],
                 "price": close_price,
-                "fee_mxn": calculated["estimated_exit_fee_mxn"],
-                "realized_pnl_mxn": calculated["unrealized_pnl_mxn"],
+                "fee_mxn": exit_fee,
+                "realized_pnl_mxn": realized_pnl,
                 "source": "manual",
                 "reason": "manual_close",
             }
@@ -244,13 +262,16 @@ async def order(body: SimulatedOrderRequest, request: Request):
             detail="En simulación spot solo puedes comprar. Para vender, cierra una posición abierta.",
         )
 
+    requested_amount = quantize_money(body.amount_mxn)
     session_factory = request.app.state.db_session_factory
     if not settings.live_trading:
         with session_factory() as db_session:
             repository = SqlSimulatedOrderRepository(db_session)
-            ledger = repository.capital_ledger(settings.simulated_initial_capital_mxn)
-        available = float(ledger["available_cash_mxn"])
-        if body.amount_mxn > available + 1e-9:
+            ledger = repository.capital_ledger_decimal(
+                settings.simulated_initial_capital_mxn
+            )
+        available = ledger["available_cash_mxn"]
+        if requested_amount > available:
             raise HTTPException(
                 status_code=403,
                 detail=f"Saldo insuficiente. Disponible: ${available:,.2f} MXN.",
@@ -280,7 +301,9 @@ async def order(body: SimulatedOrderRequest, request: Request):
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"status": "submitted", "risk_check": decision.reason, "bitso": result}
 
-    entry_fee_rate = float(quote["effective_fee_rate"])
+    entry_fee_rate = quantize_rate(quote["effective_fee_rate"])
+    reference_price = quantize_price(quote["last"])
+    entry_fee = quantize_money(requested_amount * entry_fee_rate)
     created_at = datetime.now(timezone.utc)
     item = {
         "id": secrets.token_hex(6),
@@ -288,10 +311,10 @@ async def order(body: SimulatedOrderRequest, request: Request):
         "status": "open",
         "book": book,
         "side": "buy",
-        "amount_mxn": round(body.amount_mxn, 2),
-        "reference_price": float(quote["last"]),
+        "amount_mxn": requested_amount,
+        "reference_price": reference_price,
         "entry_fee_rate": entry_fee_rate,
-        "entry_fee_mxn": round(body.amount_mxn * entry_fee_rate, 2),
+        "entry_fee_mxn": entry_fee,
         "risk_check": decision.reason,
     }
     with session_factory() as db_session:
@@ -306,15 +329,17 @@ async def order(body: SimulatedOrderRequest, request: Request):
                 "book": book,
                 "side": "buy",
                 "status": "filled",
-                "amount_mxn": body.amount_mxn,
-                "price": quote["last"],
-                "fee_mxn": saved_item["entry_fee_mxn"],
+                "amount_mxn": requested_amount,
+                "price": reference_price,
+                "fee_mxn": entry_fee,
                 "source": "manual",
                 "reason": decision.reason,
             }
         )
         db_session.commit()
-        ledger_after = repository.capital_ledger(settings.simulated_initial_capital_mxn)
+        ledger_after = repository.capital_ledger(
+            settings.simulated_initial_capital_mxn
+        )
     return {
         **saved_item,
         "status": "simulated",
