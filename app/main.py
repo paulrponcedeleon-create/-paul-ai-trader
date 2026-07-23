@@ -24,6 +24,7 @@ from app.api.routes.pro_strategy import router as pro_strategy_router
 from app.api.routes.readiness import router as readiness_router
 from app.api.routes.research import router as research_router
 from app.api.routes.runtime import router as runtime_router
+from app.api.routes.runtime import shutdown_runtime
 from app.api.routes.system import router as system_router
 from app.api.routes.validation import router as validation_router
 from app.config import Settings, settings
@@ -53,11 +54,14 @@ def create_app(
         Base.metadata.create_all(bind=engine)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(application: FastAPI):
         try:
             yield
         finally:
-            engine.dispose()
+            try:
+                await shutdown_runtime(application)
+            finally:
+                engine.dispose()
 
     application = FastAPI(
         title=current_settings.app_name,
