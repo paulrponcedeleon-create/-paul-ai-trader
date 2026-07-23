@@ -1,0 +1,105 @@
+.order-events-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.order-event-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: center;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border, #d9e1ea);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+
+.order-event-side {
+  min-width: 58px;
+  padding: 0.4rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.order-event-side.buy {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.order-event-side.sell {
+  background: rgba(234, 88, 12, 0.12);
+  color: #c2410c;
+}
+
+.order-event-main {
+  min-width: 0;
+}
+
+.order-event-main strong,
+.order-event-main small {
+  display: block;
+}
+
+.order-event-main small {
+  margin-top: 0.2rem;
+  color: var(--muted, #64748b);
+  overflow-wrap: anywhere;
+}
+
+.order-event-values {
+  text-align: right;
+}
+
+.order-event-values strong,
+.order-event-values small {
+  display: block;
+}
+
+.order-event-values small {
+  margin-top: 0.2rem;
+  color: var(--muted, #64748b);
+}
+
+.order-event-pnl.positive {
+  color: #15803d;
+}
+
+.order-event-pnl.negative {
+  color: #b91c1c;
+}
+
+.order-event-pnl.neutral {
+  color: var(--muted, #64748b);
+}
+
+.release-marker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted, #64748b);
+}
+
+.release-marker strong {
+  color: inherit;
+}
+
+@media (max-width: 680px) {
+  .order-event-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .order-event-values {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    text-align: left;
+    padding-left: 0.1rem;
+  }
+}
