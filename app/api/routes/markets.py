@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from app.api.dependencies import require_auth
 from app.models import SimulatedOrderRequest
+from app.repositories.order_events import SqlSimulatedOrderEventRepository
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
 from app.services.bitso import BitsoError
 from app.services.portfolio import calculate_position, summarize_positions
@@ -183,6 +184,7 @@ async def close_simulation(simulation_id: str, request: Request):
     closed_at = datetime.now(timezone.utc)
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
+        event_repository = SqlSimulatedOrderEventRepository(db_session)
         closed = repository.close(
             simulation_id,
             closed_at=closed_at,
@@ -193,6 +195,22 @@ async def close_simulation(simulation_id: str, request: Request):
         )
         if closed is None:
             raise HTTPException(status_code=409, detail="La posición ya fue cerrada.")
+        event_repository.add(
+            {
+                "id": f"evt_{secrets.token_hex(8)}",
+                "created_at": closed_at,
+                "position_id": simulation_id,
+                "book": open_order["book"],
+                "side": "sell",
+                "status": "filled",
+                "amount_mxn": open_order["amount_mxn"],
+                "price": close_price,
+                "fee_mxn": calculated["estimated_exit_fee_mxn"],
+                "realized_pnl_mxn": calculated["unrealized_pnl_mxn"],
+                "source": "manual",
+                "reason": "manual_close",
+            }
+        )
         db_session.commit()
     return {
         **closed,
@@ -263,9 +281,10 @@ async def order(body: SimulatedOrderRequest, request: Request):
         return {"status": "submitted", "risk_check": decision.reason, "bitso": result}
 
     entry_fee_rate = float(quote["effective_fee_rate"])
+    created_at = datetime.now(timezone.utc)
     item = {
         "id": secrets.token_hex(6),
-        "created_at": datetime.now(timezone.utc),
+        "created_at": created_at,
         "status": "open",
         "book": book,
         "side": "buy",
@@ -277,7 +296,23 @@ async def order(body: SimulatedOrderRequest, request: Request):
     }
     with session_factory() as db_session:
         repository = SqlSimulatedOrderRepository(db_session)
+        event_repository = SqlSimulatedOrderEventRepository(db_session)
         saved_item = add_simulation(item, repository)
+        event_repository.add(
+            {
+                "id": f"evt_{secrets.token_hex(8)}",
+                "created_at": created_at,
+                "position_id": saved_item["id"],
+                "book": book,
+                "side": "buy",
+                "status": "filled",
+                "amount_mxn": body.amount_mxn,
+                "price": quote["last"],
+                "fee_mxn": saved_item["entry_fee_mxn"],
+                "source": "manual",
+                "reason": decision.reason,
+            }
+        )
         db_session.commit()
         ledger_after = repository.capital_ledger(settings.simulated_initial_capital_mxn)
     return {
