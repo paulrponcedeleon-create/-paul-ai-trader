@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 
 from app.config import Settings
 from app.db import models  # noqa: F401
+from app.db import order_models  # noqa: F401
 from app.db.base import Base
 from app.db.session import normalize_database_url
 
