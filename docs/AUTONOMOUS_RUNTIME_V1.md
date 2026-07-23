@@ -8,6 +8,10 @@ Scope:
 - Paper broker only.
 - Dashboard status translated to user-facing Spanish.
 - No real-money orders.
+- Runtime sizing now clamps suggested buys to deployable cash, capital reserve
+  and the configured per-trade risk limit before sending the order to the paper
+  broker. This keeps buy validation deterministic instead of generating an AI
+  suggestion that the risk layer must reject on every cycle.
 
 Important limitation:
 The current Bitso provider derives short candle sequences from public ticker data. Historical multi-timeframe ingestion, persistent learning and strategy promotion remain separate phases and must not be represented as complete until real historical datasets are connected and validated.

@@ -54,6 +54,40 @@ class PaperPosition:
     def unrealized_pnl(self, price: Decimal) -> Decimal:
         return self.market_value(price) - self.amount_mxn - self.entry_fee_mxn
 
+    def closed_copy(
+        self,
+        *,
+        quantity: Decimal,
+        amount_mxn: Decimal,
+        entry_fee_mxn: Decimal,
+        closed_at: datetime,
+        exit_price: Decimal,
+        exit_fee_mxn: Decimal,
+        realized_pnl_mxn: Decimal,
+        close_reason: str,
+    ) -> PaperPosition:
+        return PaperPosition(
+            id=self.id,
+            book=self.book,
+            quantity=quantity,
+            entry_price=self.entry_price,
+            amount_mxn=amount_mxn,
+            opened_at=self.opened_at,
+            entry_fee_mxn=entry_fee_mxn,
+            stop_loss=self.stop_loss,
+            take_profit=self.take_profit,
+            trailing_stop_pct=self.trailing_stop_pct,
+            trailing_stop_price=self.trailing_stop_price,
+            expires_at=self.expires_at,
+            signal_data=dict(self.signal_data),
+            status="closed",
+            closed_at=closed_at,
+            exit_price=exit_price,
+            exit_fee_mxn=exit_fee_mxn,
+            realized_pnl_mxn=realized_pnl_mxn,
+            close_reason=close_reason,
+        )
+
 
 @dataclass(frozen=True)
 class PaperOrder:

@@ -32,7 +32,9 @@ def test_dashboard_renders_verified_assets_filters_and_auto_refresh(client):
         assert removed not in market_html
 
 
-def test_new_visual_assets_define_full_card_portfolio_colors_and_refresh_intervals(client):
+def test_new_visual_assets_define_full_card_portfolio_colors_and_refresh_intervals(
+    client,
+):
     css = client.get("/static/market-panel-v2.css")
     javascript = client.get("/static/market-panel-v2.js")
 
@@ -49,3 +51,12 @@ def test_new_visual_assets_define_full_card_portfolio_colors_and_refresh_interva
     assert "const STOCK_REFRESH_MS = 60000" in javascript.text
     assert "const CARD_AGE_REFRESH_MS = 5000" in javascript.text
     assert "refreshBtn" not in javascript.text
+
+
+def test_dashboard_refresh_uses_null_safe_dom_updates(client):
+    javascript = client.get("/static/dashboard-v2.js")
+
+    assert javascript.status_code == 200
+    assert "const setText = (selector, value)" in javascript.text
+    assert "if (node) node.textContent = value" in javascript.text
+    assert "if (!endpoints[name]) return null" in javascript.text

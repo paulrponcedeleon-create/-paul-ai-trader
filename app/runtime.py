@@ -20,6 +20,7 @@ from app.brokers.factory import BrokerFactory
 from app.brokers.interface import BrokerInterface
 from app.market_data import MarketDataProvider, ProviderFactory
 from app.paper_trading.risk import RiskLimits, RiskManager
+from app.services.backtest_metrics import round_money, to_decimal
 from app.strategies.factory import StrategyFactory
 from app.system import SystemService
 
@@ -79,7 +80,9 @@ class AssetBrain:
         self.last_action = action
         self.last_strategy = strategy
         self.last_score = float(payload.get("score", payload.get("confidence", 0)) or 0)
-        self.last_confidence = float(payload.get("confidence", payload.get("confidence_pct", 0)) or 0)
+        self.last_confidence = float(
+            payload.get("confidence", payload.get("confidence_pct", 0)) or 0
+        )
         if action == "buy":
             self.buy_decisions += 1
         elif action == "sell":
@@ -160,16 +163,17 @@ class RuntimeEngine:
         )
         self.analytics = analytics or AnalyticsService(broker=self.broker)
         self.system = system or SystemService()
-        self.risk_manager = risk_manager or RiskManager(
-            RiskLimits(
-                max_risk_per_trade_pct=Decimal("10"),
-                max_daily_risk_pct=Decimal("20"),
-                max_daily_loss_mxn=Decimal(str(getattr(settings, "max_daily_loss_mxn", 500))),
-                max_positions=1000000,
-                max_asset_exposure_pct=Decimal("35"),
-                max_total_exposure_pct=Decimal("80"),
-            )
+        self.risk_limits = RiskLimits(
+            max_risk_per_trade_pct=Decimal("10"),
+            max_daily_risk_pct=Decimal("20"),
+            max_daily_loss_mxn=Decimal(
+                str(getattr(settings, "max_daily_loss_mxn", 500))
+            ),
+            max_positions=1000000,
+            max_asset_exposure_pct=Decimal("35"),
+            max_total_exposure_pct=Decimal("80"),
         )
+        self.risk_manager = risk_manager or RiskManager(self.risk_limits)
         self.running = False
         self.cycles = 0
         self.last_error: str | None = None
@@ -204,7 +208,9 @@ class RuntimeEngine:
         discovered: list[str] = []
         for book in self.config.books:
             try:
-                candles = await self.market_data.get_candles(book, self.config.timeframe, 20)
+                candles = await self.market_data.get_candles(
+                    book, self.config.timeframe, 20
+                )
                 if candles:
                     discovered.append(book)
                     self.history[book] = list(candles[-self.config.max_history :])
@@ -275,7 +281,9 @@ class RuntimeEngine:
 
     def _dynamic_trade_amount(self, decision: Any, balance: Any) -> Decimal:
         payload = decision.to_public_dict()
-        confidence = Decimal(str(payload.get("confidence", payload.get("confidence_pct", 50)) or 50))
+        confidence = Decimal(
+            str(payload.get("confidence", payload.get("confidence_pct", 50)) or 50)
+        )
         if confidence <= 1:
             confidence *= Decimal("100")
         confidence = min(Decimal("100"), max(Decimal("0"), confidence))
@@ -284,8 +292,17 @@ class RuntimeEngine:
             return Decimal("0")
         span = self.config.max_trade_amount_mxn - self.config.min_trade_amount_mxn
         proposed = self.config.min_trade_amount_mxn + span * confidence / Decimal("100")
-        amount = min(proposed, self.config.max_trade_amount_mxn, deployable)
-        return amount.quantize(Decimal("0.01"))
+        max_risk_amount = (
+            Decimal(str(balance.equity_mxn))
+            * to_decimal(self.risk_limits.max_risk_per_trade_pct)
+            / Decimal("100")
+        )
+        amount = min(
+            proposed, self.config.max_trade_amount_mxn, deployable, max_risk_amount
+        )
+        if amount < self.config.min_trade_amount_mxn:
+            return Decimal("0")
+        return round_money(amount)
 
     def status(self) -> RuntimeStatus:
         balance = self.broker.get_balance()
@@ -337,7 +354,8 @@ class RuntimeEngine:
                 "position_count_limit": None,
             },
             "asset_brains": {
-                book: brain.to_public_dict() for book, brain in self.asset_brains.items()
+                book: brain.to_public_dict()
+                for book, brain in self.asset_brains.items()
             },
             "risk_rules": {
                 "automatic_stop_loss": True,
@@ -408,7 +426,9 @@ class RuntimeEngine:
             )
         )
         self.observations += 1
-        self.decision_counts[decision.action] = self.decision_counts.get(decision.action, 0) + 1
+        self.decision_counts[decision.action] = (
+            self.decision_counts.get(decision.action, 0) + 1
+        )
         brain = self.asset_brains.setdefault(book, AssetBrain(book=book))
         brain.observe(decision, price, self.config.strategy_name)
         dynamic_amount = self._dynamic_trade_amount(decision, balance)
@@ -433,16 +453,30 @@ class RuntimeEngine:
                 )
                 return
             asset_exposure = sum(
-                Decimal(str(position.get("amount_mxn", position.get("invested_mxn", 0)) or 0))
-                for position in self.broker.get_positions()
-                if position.get("book") == book
+                (
+                    Decimal(
+                        str(
+                            position.get("amount_mxn", position.get("invested_mxn", 0))
+                            or 0
+                        )
+                    )
+                    for position in self.broker.get_positions()
+                    if position.get("book") == book
+                ),
+                Decimal("0"),
             )
-            amount = dynamic_amount if decision.action == "buy" else self.config.min_trade_amount_mxn
+            amount = (
+                dynamic_amount
+                if decision.action == "buy"
+                else self.config.min_trade_amount_mxn
+            )
             risk = self.risk_manager.evaluate_open(
                 book=book,
                 amount_mxn=amount,
                 equity_mxn=balance.equity_mxn,
-                daily_realized_pnl_mxn=Decimal(str(balance.metadata.get("realized_pnl_mxn", 0))),
+                daily_realized_pnl_mxn=Decimal(
+                    str(balance.metadata.get("realized_pnl_mxn", 0))
+                ),
                 open_positions_count=len(self.broker.get_positions()),
                 asset_exposure_mxn=asset_exposure,
                 total_exposure_mxn=balance.positions_value_mxn,

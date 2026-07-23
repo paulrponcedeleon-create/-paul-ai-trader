@@ -37,7 +37,10 @@ señales, riesgo, sizing, portafolio, persistencia y reportes.
 ## Gestión de posiciones
 
 `PortfolioManager` soporta stop loss, take profit, trailing stop, cierre manual,
-cierre automático por señal y expiración opcional de posiciones.
+cierre parcial por monto MXN, cierre automático por señal y expiración opcional
+de posiciones. Los cierres parciales realizan P&L y comisiones de forma
+proporcional, conservan el remanente como posición abierta y agregan un registro
+cerrado inmutable para historial y reportes.
 
 ## Riesgo
 
