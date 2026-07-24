@@ -65,7 +65,7 @@ async def login(body: LoginRequest, request: Request):
     ):
         user = SimpleNamespace(id=OWNER_USER_ID, username=owner_username)
         _start_session(request, user)
-        return {"ok": True, "login_source": "owner_environment"}
+        return {"ok": True}
 
     user = None
     try:
@@ -81,9 +81,14 @@ async def login(body: LoginRequest, request: Request):
         ) from exc
 
     if user is None:
-        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+        detail = (
+            "Contraseña incorrecta."
+            if username == owner_username
+            else "Usuario o contraseña incorrectos."
+        )
+        raise HTTPException(status_code=401, detail=detail)
     _start_session(request, user)
-    return {"ok": True, "login_source": "database"}
+    return {"ok": True}
 
 
 @router.post("/register", status_code=201)
