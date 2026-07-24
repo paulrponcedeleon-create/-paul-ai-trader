@@ -134,6 +134,7 @@ def test_positions_api_returns_persistent_source_and_source_summary(client):
 
 
 def test_validation_status_uses_real_open_and_closed_positions(client):
+    assert client.post("/api/login", json={"password": "test-password"}).status_code == 200
     with client.app.state.db_session_factory() as session:
         repository = SqlSimulatedOrderRepository(session)
         repository.add(_order("manual-open", source="manual"))
