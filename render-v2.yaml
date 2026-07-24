@@ -6,7 +6,7 @@ services:
     region: oregon
     branch: v2-dashboard
     buildCommand: pip install -r requirements.txt
-    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python scripts/render_start.py
     healthCheckPath: /health
     autoDeployTrigger: checksPass
     envVars:
@@ -33,6 +33,8 @@ services:
       - key: BITSO_API_SECRET
         sync: false
       - key: LIVE_TRADING
+        value: "false"
+      - key: RUNTIME_AUTO_START
         value: "false"
       - key: MAX_ORDER_MXN
         value: "200"
