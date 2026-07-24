@@ -181,10 +181,11 @@ def test_community_learning_response_is_aggregated_without_identity(client):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["privacy"] == "aggregated_without_usernames_or_trade_ids"
+    assert payload["privacy"] == "aggregate_only_without_identity_or_trade_ids"
     serialized = str(payload).lower()
     assert "paul" not in serialized
     assert "username" not in serialized
+    assert "user_id" not in serialized
 
 
 def test_only_admin_can_list_family_accounts(client):
