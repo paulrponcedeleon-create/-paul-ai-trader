@@ -10,6 +10,8 @@ services:
     envVars:
       - key: APP_ENV
         value: "production"
+      - key: OWNER_USERNAME
+        value: "paul"
       - key: APP_PASSWORD
         sync: false
       - key: SESSION_SECRET
@@ -18,6 +20,14 @@ services:
         value: "true"
       - key: DATABASE_URL
         sync: false
+      - key: REGISTRATION_ENABLED
+        value: "true"
+      - key: USER_REGISTRATION_CODE
+        generateValue: true
+      - key: CREDENTIAL_ENCRYPTION_KEY
+        generateValue: true
+      - key: COMMUNITY_LEARNING_ENABLED
+        value: "true"
       - key: BITSO_BASE_URL
         value: "https://api.bitso.com/api/v3"
       - key: BITSO_API_KEY
@@ -26,6 +36,10 @@ services:
         sync: false
       - key: LIVE_TRADING
         value: "false"
+      - key: SIMULATED_INITIAL_CAPITAL_MXN
+        value: "5000"
+      - key: RUNTIME_AUTO_START
+        value: "true"
       - key: MAX_ORDER_MXN
         value: "200"
       - key: MAX_DAILY_LOSS_MXN
