@@ -1,4 +1,5 @@
 import secrets
+from types import SimpleNamespace
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.routing import APIRoute
@@ -16,7 +17,7 @@ from app.api.routes.order_events import router as order_events_router
 from app.api.routes.partial_closes import router as partial_closes_router
 from app.api.routes.performance_summary import router as performance_summary_router
 from app.models import LoginRequest, RegisterRequest
-from app.repositories.users import SqlUserAccountRepository
+from app.repositories.users import OWNER_USER_ID, SqlUserAccountRepository
 
 
 def _market_operation_id(route: APIRoute) -> str:
@@ -53,9 +54,10 @@ def _start_session(request: Request, user) -> None:
 async def login(body: LoginRequest, request: Request):
     settings = request.app.state.settings
     username = (body.username or settings.owner_username).strip().lower()
-    with request.app.state.db_session_factory() as session:
-        repository = SqlUserAccountRepository(session)
-        try:
+    user = None
+    try:
+        with request.app.state.db_session_factory() as session:
+            repository = SqlUserAccountRepository(session)
             repository.ensure_owner(
                 username=settings.owner_username,
                 display_name="Paul",
@@ -64,13 +66,22 @@ async def login(body: LoginRequest, request: Request):
             )
             session.commit()
             user = repository.authenticate(username, body.password)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        if user is None:
-            raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
-        public = user.to_public_dict()
-        _start_session(request, user)
-    return {"ok": True, "user": public}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        # During the first rolling deploy the application may start before the
+        # new user_accounts migration is visible. Preserve only the original
+        # owner's environment-password login; no family account can use this path.
+        if username == settings.owner_username.strip().lower() and secrets.compare_digest(
+            body.password,
+            settings.app_password,
+        ):
+            user = SimpleNamespace(id=OWNER_USER_ID, username=username)
+
+    if user is None:
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
+    _start_session(request, user)
+    return {"ok": True}
 
 
 @router.post("/register", status_code=201)
