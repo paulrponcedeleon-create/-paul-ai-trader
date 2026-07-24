@@ -153,8 +153,8 @@ async def startup_runtime(application: FastAPI) -> None:
         application.state.runtime_startup_state = "blocked_non_paper_broker"
         return
 
-    runtime = _runtime_for_application(application)
     try:
+        runtime = _runtime_for_application(application)
         if not runtime.running:
             await runtime.start()
         _ensure_background_task(application, runtime)
