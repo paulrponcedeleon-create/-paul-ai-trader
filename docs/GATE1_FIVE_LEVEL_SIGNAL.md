@@ -1,5 +1,9 @@
 # Gate 1 — Semáforo de cinco niveles
 
+## Estado
+
+Implementación completa y lista para validación de CI sobre `v2-dashboard`.
+
 ## Resultado visible
 
 Las tarjetas de mercado muestran una interpretación consistente de score y confianza:
