@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -49,6 +50,17 @@ BASE_DIR = Path(__file__).resolve().parent
 PERFORMANCE_TIMEZONE = "America/Ciudad_Juarez"
 
 
+async def _bootstrap_runtime_without_blocking(application: FastAPI) -> None:
+    """Start the paper runtimes without delaying HTTP readiness on Render."""
+    application.state.runtime_bootstrap_error = None
+    try:
+        await startup_runtime(application)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        application.state.runtime_bootstrap_error = f"{type(exc).__name__}: {exc}"
+
+
 def create_app(
     app_settings: Settings | None = None,
     bitso_client: BitsoClient | None = None,
@@ -64,6 +76,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         application.state.owner_bootstrap_error = None
+        application.state.runtime_bootstrap_task = None
+        application.state.runtime_bootstrap_error = None
         try:
             with session_factory() as session:
                 SqlUserAccountRepository(session).ensure_owner(
@@ -76,10 +90,25 @@ def create_app(
         except Exception as exc:
             application.state.owner_bootstrap_error = f"{type(exc).__name__}: {exc}"
 
+        application.state.runtime_bootstrap_task = asyncio.create_task(
+            _bootstrap_runtime_without_blocking(application),
+            name="paul-ai-runtime-bootstrap",
+        )
         try:
-            await startup_runtime(application)
+            # HTTP endpoints, especially /health, become available immediately.
+            # Runtime initialization continues independently in the background.
             yield
         finally:
+            bootstrap_task = getattr(
+                application.state,
+                "runtime_bootstrap_task",
+                None,
+            )
+            if bootstrap_task is not None and not bootstrap_task.done():
+                bootstrap_task.cancel()
+            if bootstrap_task is not None:
+                with suppress(asyncio.CancelledError, Exception):
+                    await bootstrap_task
             try:
                 await shutdown_runtime(application)
             finally:
