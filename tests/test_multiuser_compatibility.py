@@ -26,7 +26,7 @@ def test_community_learning_is_anonymous(client):
     payload = client.get("/api/learning/community").json()
     serialized = str(payload).lower()
 
-    assert payload["privacy"] == "aggregated_without_usernames_or_trade_ids"
+    assert payload["privacy"] == "aggregate_only_without_identity_or_trade_ids"
     assert "paul" not in serialized
     assert "username" not in serialized
     assert "user_id" not in serialized
