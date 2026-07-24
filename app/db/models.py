@@ -15,6 +15,7 @@ from app.services.money import (
     public_rate,
     quantize_quantity,
 )
+from app.services.trade_sources import MANUAL_SOURCE, public_source
 
 
 class SimulatedOrder(Base):
@@ -44,6 +45,9 @@ class SimulatedOrder(Base):
     realized_pnl_mxn: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="simulated", index=True
+    )
+    source: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=MANUAL_SOURCE, index=True
     )
     strategy_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     signal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -79,6 +83,7 @@ class SimulatedOrder(Base):
             "exit_fee_rate": public_rate(self.exit_fee_rate),
             "exit_fee_mxn": public_money(self.exit_fee_mxn),
             "realized_pnl_mxn": public_money(self.realized_pnl_mxn),
+            **public_source(self.source),
             "risk_check": self.risk_check,
         }
 
