@@ -25,6 +25,7 @@ VERIFIED_RUNTIME_BOOKS = (
     "xrp_mxn",
     "usdt_mxn",
 )
+OWNER_USER_ID = "owner"
 
 
 def _with_signal_level(decision: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -38,6 +39,144 @@ def _with_signal_level(decision: dict[str, Any] | None) -> dict[str, Any] | None
     )
     result.update(level.to_public_dict())
     return result
+
+
+def _legacy_runtime(request: Request) -> Any | None:
+    state = request.app.state
+    if hasattr(state, "runtime_engines"):
+        return None
+    return getattr(state, "runtime_engine", None)
+
+
+def _legacy_payload(request: Request, runtime: Any, status: Any) -> dict[str, Any]:
+    payload = status.to_public_dict()
+    payload["last_decision"] = _with_signal_level(payload.get("last_decision"))
+    settings = request.app.state.settings
+    task = getattr(request.app.state, "runtime_background_task", None)
+    payload.update(
+        {
+            "automatic": bool(getattr(settings, "runtime_auto_start", True)),
+            "startup_state": getattr(
+                request.app.state,
+                "runtime_startup_state",
+                "manual",
+            ),
+            "startup_error": getattr(
+                request.app.state,
+                "runtime_startup_error",
+                None,
+            ),
+            "background_task_active": bool(task is not None and not task.done()),
+            "mode_label": (
+                "Simulación automática"
+                if not getattr(settings, "live_trading", False)
+                else "Dinero real"
+            ),
+            "provider_label": (
+                "Bitso, solo lectura"
+                if runtime.config.market_data_provider == "bitso"
+                else runtime.config.market_data_provider
+            ),
+            "broker_label": (
+                "Dinero simulado"
+                if runtime.config.broker_name == "paper"
+                else runtime.config.broker_name
+            ),
+            "risk_label": (
+                "Protección automática: pérdida 3%, objetivo 6% y seguimiento 2%"
+            ),
+            "history_label": (
+                f"{payload.get('history_points', 0)} datos cargados para análisis"
+            ),
+        }
+    )
+    return payload
+
+
+@router.post("/runtime/start")
+async def runtime_start(request: Request):
+    legacy = _legacy_runtime(request)
+    if legacy is not None:
+        status = legacy.status() if legacy.running else await legacy.start()
+        _ensure_background_loop(request, legacy)
+        request.app.state.runtime_startup_state = "manual_running"
+        request.app.state.runtime_startup_error = None
+        return _legacy_payload(request, legacy, status)
+
+    user_id = require_auth(request)
+    if request.app.state.settings.live_trading:
+        raise HTTPException(
+            status_code=403,
+            detail="El Runtime multiusuario solo se puede iniciar en simulación.",
+        )
+    with request.app.state.db_session_factory() as session:
+        repository = SqlUserAccountRepository(session)
+        repository.update_preferences(user_id, bot_enabled=True)
+        session.commit()
+    await apply_user_runtime_preference(request.app, user_id)
+    return _runtime_payload(request.app, user_id)
+
+
+@router.post("/runtime/stop")
+async def runtime_stop(request: Request):
+    legacy = _legacy_runtime(request)
+    if legacy is not None:
+        await _cancel_legacy_background_task(request.app)
+        status = await legacy.stop() if legacy.running else legacy.status()
+        request.app.state.runtime_startup_state = "stopped"
+        return _legacy_payload(request, legacy, status)
+
+    user_id = require_auth(request)
+    with request.app.state.db_session_factory() as session:
+        repository = SqlUserAccountRepository(session)
+        repository.update_preferences(user_id, bot_enabled=False)
+        session.commit()
+    await apply_user_runtime_preference(request.app, user_id)
+    return _runtime_payload(request.app, user_id)
+
+
+@router.get("/runtime/status")
+async def runtime_status(request: Request):
+    legacy = _legacy_runtime(request)
+    if legacy is not None:
+        return _legacy_payload(request, legacy, legacy.status())
+    user_id = require_auth(request)
+    return _runtime_payload(request.app, user_id)
+
+
+@router.get("/runtime/components")
+async def runtime_components(request: Request):
+    legacy = _legacy_runtime(request)
+    if legacy is not None:
+        return legacy.components()
+    user_id = require_auth(request)
+    runtime = _runtime_for_application(request.app, user_id)
+    with user_scope(user_id):
+        return runtime.components()
+
+
+@router.get("/runtime/config")
+async def runtime_config(request: Request):
+    legacy = _legacy_runtime(request)
+    if legacy is not None:
+        payload = legacy.config.to_public_dict()
+        payload["exploration"] = legacy.status().to_public_dict().get("exploration")
+        return payload
+
+    user_id = require_auth(request)
+    runtime = _runtime_for_application(request.app, user_id)
+    with user_scope(user_id):
+        payload = runtime.config.to_public_dict()
+        payload["exploration"] = runtime.status().to_public_dict().get("exploration")
+    user = _load_user(request.app, user_id)
+    payload["account"] = {
+        "user_id": user.id,
+        "username": user.username,
+        "bot_enabled": user.bot_enabled,
+        "ai_exploration_enabled": user.ai_exploration_enabled,
+        "simulated_initial_capital_mxn": float(user.simulated_initial_capital_mxn),
+    }
+    return payload
 
 
 def _registries(application: FastAPI) -> tuple[dict, dict, dict, dict]:
@@ -84,65 +223,6 @@ def _settings_for_user(application: FastAPI, user) -> Any:
     )
 
 
-@router.post("/runtime/start")
-async def runtime_start(request: Request):
-    user_id = require_auth(request)
-    if request.app.state.settings.live_trading:
-        raise HTTPException(
-            status_code=403,
-            detail="El Runtime multiusuario solo se puede iniciar en simulación.",
-        )
-    with request.app.state.db_session_factory() as session:
-        repository = SqlUserAccountRepository(session)
-        repository.update_preferences(user_id, bot_enabled=True)
-        session.commit()
-    await apply_user_runtime_preference(request.app, user_id)
-    return _runtime_payload(request.app, user_id)
-
-
-@router.post("/runtime/stop")
-async def runtime_stop(request: Request):
-    user_id = require_auth(request)
-    with request.app.state.db_session_factory() as session:
-        repository = SqlUserAccountRepository(session)
-        repository.update_preferences(user_id, bot_enabled=False)
-        session.commit()
-    await apply_user_runtime_preference(request.app, user_id)
-    return _runtime_payload(request.app, user_id)
-
-
-@router.get("/runtime/status")
-async def runtime_status(request: Request):
-    user_id = require_auth(request)
-    return _runtime_payload(request.app, user_id)
-
-
-@router.get("/runtime/components")
-async def runtime_components(request: Request):
-    user_id = require_auth(request)
-    runtime = _runtime_for_application(request.app, user_id)
-    with user_scope(user_id):
-        return runtime.components()
-
-
-@router.get("/runtime/config")
-async def runtime_config(request: Request):
-    user_id = require_auth(request)
-    runtime = _runtime_for_application(request.app, user_id)
-    with user_scope(user_id):
-        payload = runtime.config.to_public_dict()
-        payload["exploration"] = runtime.status().to_public_dict().get("exploration")
-    user = _load_user(request.app, user_id)
-    payload["account"] = {
-        "user_id": user.id,
-        "username": user.username,
-        "bot_enabled": user.bot_enabled,
-        "ai_exploration_enabled": user.ai_exploration_enabled,
-        "simulated_initial_capital_mxn": float(user.simulated_initial_capital_mxn),
-    }
-    return payload
-
-
 async def startup_runtime(application: FastAPI) -> None:
     """Start one isolated paper Runtime for every active user who enabled the bot."""
     _registries(application)
@@ -150,11 +230,13 @@ async def startup_runtime(application: FastAPI) -> None:
         application, user_id
     )
     settings = application.state.settings
-    if settings.app_env == "test":
+    if getattr(settings, "app_env", "development") == "test":
         return
-    if not settings.runtime_auto_start or settings.live_trading:
+    if not getattr(settings, "runtime_auto_start", True) or getattr(
+        settings, "live_trading", False
+    ):
         return
-    if str(settings.runtime_broker).lower() != "paper":
+    if str(getattr(settings, "runtime_broker", "paper")).lower() != "paper":
         return
 
     try:
@@ -172,8 +254,19 @@ async def startup_runtime(application: FastAPI) -> None:
 
 
 async def shutdown_runtime(application: FastAPI) -> None:
-    """Cancel every user's background task and disconnect all Runtime engines."""
-    engines, tasks, _, _ = _registries(application)
+    """Cancel legacy or per-user background work without creating unused engines."""
+    state = application.state
+    legacy_runtime = getattr(state, "runtime_engine", None)
+    has_multiuser_registries = hasattr(state, "runtime_engines")
+
+    if not has_multiuser_registries:
+        await _cancel_legacy_background_task(application)
+        if legacy_runtime is not None and legacy_runtime.running:
+            await legacy_runtime.stop()
+        return
+
+    engines = state.runtime_engines
+    tasks = getattr(state, "runtime_background_tasks", {})
     for user_id in list(tasks):
         await _cancel_background_task(application, user_id)
     for user_id, runtime in list(engines.items()):
@@ -182,10 +275,12 @@ async def shutdown_runtime(application: FastAPI) -> None:
                 with suppress(Exception):
                     await runtime.stop()
     engines.clear()
+    state.runtime_engine = None
+    state.runtime_background_task = None
 
 
 async def apply_user_runtime_preference(application: FastAPI, user_id: str) -> None:
-    """Apply the saved per-user bot and IA switches without affecting other users."""
+    """Apply one user's Bot/IA switches without affecting any other account."""
     engines, _, states, errors = _registries(application)
     user = _load_user(application, user_id)
     settings = application.state.settings
@@ -223,7 +318,7 @@ async def apply_user_runtime_preference(application: FastAPI, user_id: str) -> N
 
 async def _background_loop(
     runtime: ExplorationRuntimeEngine,
-    user_id: str,
+    user_id: str = OWNER_USER_ID,
 ) -> None:
     while True:
         with user_scope(user_id):
@@ -231,9 +326,34 @@ async def _background_loop(
         await asyncio.sleep(max(runtime.config.loop_interval_seconds, 5.0))
 
 
+async def _cancel_legacy_background_task(application: FastAPI) -> None:
+    task = getattr(application.state, "runtime_background_task", None)
+    application.state.runtime_background_task = None
+    if task is None:
+        return
+    if not task.done():
+        task.cancel()
+    with suppress(asyncio.CancelledError, Exception):
+        await task
+
+
+def _ensure_background_loop(request: Request, runtime: Any) -> None:
+    """Backward-compatible helper for the original single Runtime contract."""
+    if not bool(getattr(request.app.state.settings, "runtime_auto_start", True)):
+        return
+    task = getattr(request.app.state, "runtime_background_task", None)
+    if task is None or task.done():
+        request.app.state.runtime_background_task = asyncio.create_task(
+            _background_loop(runtime),
+            name="paul-ai-paper-runtime",
+        )
+
+
 async def _cancel_background_task(application: FastAPI, user_id: str) -> None:
     _, tasks, _, _ = _registries(application)
     task = tasks.pop(user_id, None)
+    if user_id == OWNER_USER_ID:
+        application.state.runtime_background_task = None
     if task is None:
         return
     if not task.done():
@@ -251,10 +371,13 @@ def _ensure_background_task(
     task = tasks.get(user_id)
     if task is None or task.done():
         with user_scope(user_id):
-            tasks[user_id] = asyncio.create_task(
+            task = asyncio.create_task(
                 _background_loop(runtime, user_id),
                 name=f"paul-ai-paper-runtime-{user_id}",
             )
+        tasks[user_id] = task
+        if user_id == OWNER_USER_ID:
+            application.state.runtime_background_task = task
 
 
 def _resolved_runtime_books(settings) -> tuple[str, ...]:
@@ -317,6 +440,8 @@ def _runtime_for_application(
             settings=settings,
         )
     engines[user_id] = runtime
+    if user_id == OWNER_USER_ID:
+        application.state.runtime_engine = runtime
     return runtime
 
 
@@ -356,8 +481,12 @@ def _runtime_payload(application: FastAPI, user_id: str) -> dict[str, Any]:
                 else runtime.config.market_data_provider
             ),
             "broker_label": "Dinero simulado",
-            "risk_label": "Protección automática: pérdida 3%, objetivo 6% y seguimiento 2%",
-            "history_label": f"{payload.get('history_points', 0)} datos cargados para análisis",
+            "risk_label": (
+                "Protección automática: pérdida 3%, objetivo 6% y seguimiento 2%"
+            ),
+            "history_label": (
+                f"{payload.get('history_points', 0)} datos cargados para análisis"
+            ),
             "signal_scale": [
                 {"color": "blue", "label": "Oportunidad excepcional"},
                 {"color": "green", "label": "Favorable"},
@@ -368,3 +497,11 @@ def _runtime_payload(application: FastAPI, user_id: str) -> dict[str, Any]:
         }
     )
     return payload
+
+
+def _runtime(request: Request) -> ExplorationRuntimeEngine:
+    legacy = _legacy_runtime(request)
+    if legacy is not None:
+        return legacy
+    user_id = require_auth(request)
+    return _runtime_for_application(request.app, user_id)
