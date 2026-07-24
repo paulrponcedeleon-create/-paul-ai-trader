@@ -6,9 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.services.money import (
-    PRICE_QUANTUM,
-    QUANTITY_QUANTUM,
-    RATE_QUANTUM,
     public_money,
     public_price,
     public_quantity,
@@ -22,17 +19,14 @@ class SimulatedOrder(Base):
     __tablename__ = "simulated_orders"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="owner", index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False,
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
-    closed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    parent_position_id: Mapped[str | None] = mapped_column(
-        String(40), nullable=True, index=True
-    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    parent_position_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     book: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     side: Mapped[str] = mapped_column(String(8), nullable=False)
     amount_mxn: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
@@ -43,18 +37,12 @@ class SimulatedOrder(Base):
     exit_fee_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 12), nullable=True)
     exit_fee_mxn: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
     realized_pnl_mxn: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="simulated", index=True
-    )
-    source: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=MANUAL_SOURCE, index=True
-    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="simulated", index=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default=MANUAL_SOURCE, index=True)
     strategy_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     signal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     risk_decision_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    correlation_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True
-    )
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     risk_check: Mapped[str] = mapped_column(String(255), nullable=False)
 
     def to_dict(self) -> dict[str, object]:
@@ -62,12 +50,10 @@ class SimulatedOrder(Base):
         if self.reference_price is not None and self.reference_price > 0:
             gross_quantity = self.amount_mxn / self.reference_price
             entry_rate = self.entry_fee_rate or Decimal("0")
-            asset_quantity = quantize_quantity(
-                gross_quantity * (Decimal("1") - entry_rate)
-            )
-
+            asset_quantity = quantize_quantity(gross_quantity * (Decimal("1") - entry_rate))
         return {
             "id": self.id,
+            "user_id": self.user_id,
             "created_at": self.created_at.isoformat(),
             "closed_at": self.closed_at.isoformat() if self.closed_at else None,
             "parent_position_id": self.parent_position_id,
@@ -90,11 +76,8 @@ class SimulatedOrder(Base):
 
 class BacktestRun(Base):
     __tablename__ = "backtest_runs"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     strategy_name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     strategy_version: Mapped[str] = mapped_column(String(64), nullable=False)
     book: Mapped[str] = mapped_column(String(32), nullable=False, index=True)

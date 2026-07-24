@@ -14,11 +14,31 @@ class BitsoError(RuntimeError):
 
 
 class BitsoClient:
-    def __init__(self, client_settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        client_settings: Settings | None = None,
+        *,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+    ) -> None:
         self.settings = client_settings or settings
+        self.api_key = (
+            str(api_key).strip()
+            if api_key is not None
+            else str(self.settings.bitso_api_key or "").strip()
+        )
+        self.api_secret = (
+            str(api_secret).strip()
+            if api_secret is not None
+            else str(self.settings.bitso_api_secret or "").strip()
+        )
         self.base_url = self.settings.bitso_base_url.rstrip("/")
         api_root = self.base_url.removesuffix("/api/v3")
         self.rfq_base_url = f"{api_root}/rfq/v1"
+
+    @property
+    def has_private_credentials(self) -> bool:
+        return bool(self.api_key and self.api_secret)
 
     @staticmethod
     def _path(endpoint: str) -> str:
@@ -31,7 +51,7 @@ class BitsoClient:
         path: str,
         payload: dict[str, Any] | None = None,
     ) -> str:
-        if not self.settings.bitso_api_key or not self.settings.bitso_api_secret:
+        if not self.has_private_credentials:
             raise BitsoError("Faltan las credenciales privadas de Bitso.")
         nonce = str(time.time_ns())
         body = (
@@ -41,11 +61,11 @@ class BitsoClient:
         )
         message = f"{nonce}{method.upper()}{path}{body}"
         signature = hmac.new(
-            self.settings.bitso_api_secret.encode("utf-8"),
+            self.api_secret.encode("utf-8"),
             message.encode("utf-8"),
             hashlib.sha256,
         ).hexdigest()
-        return f"Bitso {self.settings.bitso_api_key}:{nonce}:{signature}"
+        return f"Bitso {self.api_key}:{nonce}:{signature}"
 
     def _auth_header(
         self,
@@ -178,9 +198,7 @@ class BitsoClient:
             "POST",
             f"{self.rfq_base_url}/quotes",
             payload=payload,
-            private=bool(
-                self.settings.bitso_api_key and self.settings.bitso_api_secret
-            ),
+            private=self.has_private_credentials,
             signature_path="/rfq/v1/quotes",
         )
 
@@ -197,8 +215,6 @@ class BitsoClient:
     async def place_market_order(
         self, book: str, side: str, amount_mxn: float
     ) -> dict[str, Any]:
-        # Market buy uses minor amount (MXN). A production sell flow should
-        # calculate major asset quantity explicitly from portfolio holdings.
         if side != "buy":
             raise BitsoError(
                 "La v1 solo permite compras reales por monto MXN; ventas reales siguen bloqueadas."

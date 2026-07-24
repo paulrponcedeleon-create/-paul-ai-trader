@@ -7,89 +7,35 @@
   <link rel="stylesheet" href="/static/app.css?v=20260720-6">
   <link rel="stylesheet" href="/static/markets.css?v=20260720-4">
   <link rel="stylesheet" href="/static/source-attribution.css?v=20260724-1">
+  <link rel="stylesheet" href="/static/account-settings.css?v=20260724-1">
 </head>
 <body>
   {% set performance_books = ['btc_mxn', 'eth_mxn', 'sol_mxn', 'xrp_mxn', 'usdt_mxn', 'algn_mxn', 'tsla_mxn', 'aapl_mxn'] %}
   <main class="shell">
     <header>
-      <div>
-        <p class="eyebrow">PAUL AI TRADER</p>
-        <h1>Rendimiento</h1>
-      </div>
+      <div><p class="eyebrow">PAUL AI TRADER</p><h1>Rendimiento de mi cuenta</h1></div>
       <div class="section-title">
-        <span class="mode {{ 'live' if live_trading else 'simulation' }}">
-          {{ 'LIVE' if live_trading else 'SIMULACIÓN' }}
-        </span>
-        {% if authenticated %}
-        <button type="button" class="secondary" id="logoutBtn">Cerrar sesión</button>
-        {% endif %}
+        <span class="mode {{ 'live' if live_trading else 'simulation' }}">{{ 'LIVE' if live_trading else 'SIMULACIÓN' }}</span>
+        {% if authenticated %}<button type="button" class="secondary" id="logoutBtn">Cerrar sesión</button>{% endif %}
       </div>
     </header>
 
-    {% if authenticated %}
-    <nav class="main-nav" aria-label="Navegación principal">
-      <a href="/">Dashboard</a>
-      <a href="/performance" class="active" aria-current="page">Rendimiento</a>
-    </nav>
-    {% endif %}
+    {% if authenticated %}<nav class="main-nav" aria-label="Navegación principal"><a href="/">Dashboard</a><a href="/performance" class="active" aria-current="page">Rendimiento</a></nav>{% endif %}
 
-    <section id="loginCard" class="card {% if authenticated %}hidden{% endif %}">
-      <h2>Acceso privado</h2>
-      <p>Ingresa la contraseña configurada en Render.</p>
-      <form id="loginForm">
-        <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
-        <button type="submit">Entrar</button>
-      </form>
+    <section id="loginCard" data-registration-enabled="{{ 'true' if registration_enabled else 'false' }}" class="card {% if authenticated %}hidden{% endif %}">
+      <h2>Acceso privado</h2><p>Ingresa tu usuario y contraseña.</p>
+      <form id="loginForm"><input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required><button type="submit">Entrar</button></form>
       <p id="loginError" class="error"></p>
     </section>
 
     <div id="performanceContent" class="{% if not authenticated %}hidden{% endif %}">
       <section class="card filters-card">
-        <div class="section-title">
-          <div>
-            <p class="eyebrow">FILTROS</p>
-            <h2>Periodo y activos</h2>
-            <p class="muted">La comparación Manual vs Bot vs IA conserva el origen de quien abrió cada posición.</p>
-          </div>
-          <small id="performanceUpdated" class="muted">Esperando datos…</small>
-        </div>
-
+        <div class="section-title"><div><p class="eyebrow">FILTROS</p><h2>Periodo y activos</h2><p class="muted">Solo se muestran operaciones de la cuenta iniciada. Manual, Bot e IA conservan su origen.</p></div><small id="performanceUpdated" class="muted">Esperando datos…</small></div>
         <form id="performanceFilters" class="performance-filters">
-          <label>Periodo
-            <select id="periodFilter">
-              <option value="today">Hoy</option>
-              <option value="7d">Últimos 7 días</option>
-              <option value="30d" selected>Últimos 30 días</option>
-              <option value="month">Mes actual</option>
-              <option value="year">Año actual</option>
-              <option value="all">Todo el historial</option>
-              <option value="custom">Rango personalizado</option>
-            </select>
-          </label>
-          <label class="custom-date hidden" data-custom-date>Desde
-            <input id="startDate" type="date">
-          </label>
-          <label class="custom-date hidden" data-custom-date>Hasta
-            <input id="endDate" type="date">
-          </label>
-
-          <fieldset class="crypto-filter">
-            <legend>Activos activos</legend>
-            <div class="filter-actions">
-              <button type="button" class="text-button" id="selectAllBooks">Todos</button>
-              <button type="button" class="text-button" id="clearBooks">Ninguno</button>
-            </div>
-            <div class="book-checks">
-              {% for book in performance_books %}
-              {% if book in allowed_books %}
-              <label class="book-check">
-                <input type="checkbox" name="performanceBook" value="{{ book }}" checked>
-                <span>{{ book|upper }}</span>
-              </label>
-              {% endif %}
-              {% endfor %}
-            </div>
-          </fieldset>
+          <label>Periodo<select id="periodFilter"><option value="today">Hoy</option><option value="7d">Últimos 7 días</option><option value="30d" selected>Últimos 30 días</option><option value="month">Mes actual</option><option value="year">Año actual</option><option value="all">Todo el historial</option><option value="custom">Rango personalizado</option></select></label>
+          <label class="custom-date hidden" data-custom-date>Desde<input id="startDate" type="date"></label>
+          <label class="custom-date hidden" data-custom-date>Hasta<input id="endDate" type="date"></label>
+          <fieldset class="crypto-filter"><legend>Activos activos</legend><div class="filter-actions"><button type="button" class="text-button" id="selectAllBooks">Todos</button><button type="button" class="text-button" id="clearBooks">Ninguno</button></div><div class="book-checks">{% for book in performance_books %}{% if book in allowed_books %}<label class="book-check"><input type="checkbox" name="performanceBook" value="{{ book }}" checked><span>{{ book|upper }}</span></label>{% endif %}{% endfor %}</div></fieldset>
           <button type="submit" class="apply-filters">Aplicar filtros</button>
         </form>
         <p id="filterMessage" class="error"></p>
@@ -104,24 +50,15 @@
         <article class="card metric"><span>Mejor / peor operación</span><strong id="bestTrade">$0.00</strong><small id="worstTrade">$0.00</small></article>
       </section>
 
-      <section class="analytics-grid">
-        <article class="card chart-card"><div class="section-title"><div><p class="eyebrow">RESULTADO DIARIO</p><h2>Ganancia o pérdida neta por día</h2></div></div><div id="dailyChart" class="bar-chart empty-chart">Sin operaciones cerradas en el periodo.</div></article>
-        <article class="card chart-card"><div class="section-title"><div><p class="eyebrow">ACUMULADO</p><h2>Ganancia neta acumulada</h2></div></div><div id="cumulativeChart" class="line-chart empty-chart">Sin operaciones cerradas en el periodo.</div></article>
-      </section>
+      <section class="analytics-grid"><article class="card chart-card"><div class="section-title"><div><p class="eyebrow">RESULTADO DIARIO</p><h2>Ganancia o pérdida neta por día</h2></div></div><div id="dailyChart" class="bar-chart empty-chart">Sin operaciones cerradas en el periodo.</div></article><article class="card chart-card"><div class="section-title"><div><p class="eyebrow">ACUMULADO</p><h2>Ganancia neta acumulada</h2></div></div><div id="cumulativeChart" class="line-chart empty-chart">Sin operaciones cerradas en el periodo.</div></article></section>
 
-      <section class="card">
-        <div class="section-title"><div><p class="eyebrow">POR ACTIVO</p><h2>Comparación de resultados</h2></div></div>
-        <div class="table-wrap"><table class="performance-table"><thead><tr><th>Activo</th><th>Ops.</th><th>Ganadas</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>Rendimiento</th></tr></thead><tbody id="bookPerformance"><tr><td colspan="7">Sin resultados.</td></tr></tbody></table></div>
-      </section>
-
-      <section class="card">
-        <div class="section-title"><div><p class="eyebrow">DETALLE</p><h2>Operaciones cerradas</h2></div><small id="performancePeriodLabel" class="muted"></small></div>
-        <div class="table-wrap"><table class="performance-table"><thead><tr><th>Fecha</th><th>Activo</th><th>Acción</th><th>Invertido</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>%</th></tr></thead><tbody id="performanceOperations"><tr><td colspan="8">Sin operaciones cerradas.</td></tr></tbody></table></div>
-      </section>
+      <section class="card"><div class="section-title"><div><p class="eyebrow">POR ACTIVO</p><h2>Comparación de resultados</h2></div></div><div class="table-wrap"><table class="performance-table"><thead><tr><th>Activo</th><th>Ops.</th><th>Ganadas</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>Rendimiento</th></tr></thead><tbody id="bookPerformance"><tr><td colspan="7">Sin resultados.</td></tr></tbody></table></div></section>
+      <section class="card"><div class="section-title"><div><p class="eyebrow">DETALLE</p><h2>Operaciones cerradas</h2></div><small id="performancePeriodLabel" class="muted"></small></div><div class="table-wrap"><table class="performance-table"><thead><tr><th>Fecha</th><th>Activo</th><th>Acción</th><th>Invertido</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>%</th></tr></thead><tbody id="performanceOperations"><tr><td colspan="8">Sin operaciones cerradas.</td></tr></tbody></table></div></section>
 
       <footer><p>Las posiciones abiertas solo están en seguimiento. Una operación entra como resultado aprendido después de cerrar, conservando si fue Manual, Bot o IA.</p></footer>
     </div>
   </main>
+  <script src="/static/account-settings.js?v=20260724-1"></script>
   <script src="/static/performance.js?v=20260722-1"></script>
   <script src="/static/performance-periods.js?v=20260724-2"></script>
   <script src="/static/market-catalog.js?v=20260720-4"></script>

@@ -6,12 +6,19 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.order_models import SimulatedOrderEvent
+from app.security.user_context import get_current_user_id
 from app.services.money import quantize_money, quantize_price
 
 
 class SqlSimulatedOrderEventRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, user_id: str | None = "current") -> None:
         self.session = session
+        self.user_id = get_current_user_id() if user_id == "current" else user_id
+
+    def _scope(self, statement):
+        if self.user_id is not None:
+            statement = statement.where(SimulatedOrderEvent.user_id == self.user_id)
+        return statement
 
     def list(
         self,
@@ -22,7 +29,7 @@ class SqlSimulatedOrderEventRepository:
         side: str | None = None,
         source: str | None = None,
     ) -> list[dict[str, Any]]:
-        statement = select(SimulatedOrderEvent)
+        statement = self._scope(select(SimulatedOrderEvent))
         if books:
             statement = statement.where(
                 SimulatedOrderEvent.book.in_(sorted(book.lower() for book in books))
@@ -47,7 +54,7 @@ class SqlSimulatedOrderEventRepository:
         side: str | None = None,
         source: str | None = None,
     ) -> int:
-        statement = select(func.count()).select_from(SimulatedOrderEvent)
+        statement = self._scope(select(func.count()).select_from(SimulatedOrderEvent))
         if books:
             statement = statement.where(
                 SimulatedOrderEvent.book.in_(sorted(book.lower() for book in books))
@@ -61,6 +68,7 @@ class SqlSimulatedOrderEventRepository:
     def add(self, item: dict[str, Any]) -> dict[str, Any]:
         row = SimulatedOrderEvent(
             id=str(item["id"]),
+            user_id=str(item.get("user_id") or self.user_id or "owner"),
             created_at=item["created_at"],
             position_id=(
                 str(item["position_id"]) if item.get("position_id") is not None else None
