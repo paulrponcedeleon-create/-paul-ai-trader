@@ -182,6 +182,20 @@
 .market-route { word-break: break-word; }
 .market-empty { grid-column: 1 / -1; padding: 24px; text-align: center; color: #667085; }
 
+/* Backward-compatible action fallbacks used before level metadata arrives. */
+.books.market-grid-v2 .market-book-v2.signal-buy {
+  background: #dcfae6;
+  color: #05603a;
+}
+.books.market-grid-v2 .market-book-v2.signal-hold {
+  background: #fffaeb;
+  color: #93370d;
+}
+.books.market-grid-v2 .market-book-v2.signal-sell {
+  background: #fee4e2;
+  color: #912018;
+}
+
 .books.market-grid-v2 .market-book-v2.level-blue,
 .books.market-grid-v2 .market-book-v2.level-blue.active {
   background: #eff8ff !important;
