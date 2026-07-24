@@ -108,6 +108,7 @@
     if (!item || !card) return;
     const signal = normalizeSignal(item.signal);
     const action = signal.action;
+    const fallback = levelFallback[action] || levelFallback.hold;
     card.classList.remove(
       'signal-buy', 'signal-hold', 'signal-sell',
       'level-blue', 'level-green', 'level-yellow', 'level-orange', 'level-red',
