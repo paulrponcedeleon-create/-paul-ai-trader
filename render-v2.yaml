@@ -14,6 +14,8 @@ services:
         value: production
       - key: APP_NAME
         value: Paul AI Trader v2 Preview
+      - key: OWNER_USERNAME
+        value: paul
       - key: APP_PASSWORD
         sync: false
       - key: SESSION_SECRET
@@ -26,6 +28,14 @@ services:
         fromDatabase:
           name: paul-ai-trader-v2-db
           property: connectionString
+      - key: REGISTRATION_ENABLED
+        value: "true"
+      - key: USER_REGISTRATION_CODE
+        generateValue: true
+      - key: CREDENTIAL_ENCRYPTION_KEY
+        generateValue: true
+      - key: COMMUNITY_LEARNING_ENABLED
+        value: "true"
       - key: BITSO_BASE_URL
         value: https://api.bitso.com/api/v3
       - key: BITSO_API_KEY
