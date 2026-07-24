@@ -3,13 +3,20 @@ import secrets
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.routing import APIRoute
 
-from app.api.dependencies import SESSION_AUTH_KEY
+from app.api.dependencies import (
+    SESSION_AUTH_KEY,
+    SESSION_USERNAME_KEY,
+    SESSION_USER_ID_KEY,
+    require_admin,
+)
+from app.api.routes.account import router as account_router
 from app.api.routes.capital import router as capital_router
 from app.api.routes.markets import router as markets_router
 from app.api.routes.order_events import router as order_events_router
 from app.api.routes.partial_closes import router as partial_closes_router
 from app.api.routes.performance_summary import router as performance_summary_router
-from app.models import LoginRequest
+from app.models import LoginRequest, RegisterRequest
+from app.repositories.users import SqlUserAccountRepository
 
 
 def _market_operation_id(route: APIRoute) -> str:
@@ -32,17 +39,85 @@ router.include_router(capital_router)
 router.include_router(order_events_router)
 router.include_router(partial_closes_router)
 router.include_router(performance_summary_router)
+router.include_router(account_router)
+
+
+def _start_session(request: Request, user) -> None:
+    request.session.clear()
+    request.session[SESSION_AUTH_KEY] = True
+    request.session[SESSION_USER_ID_KEY] = user.id
+    request.session[SESSION_USERNAME_KEY] = user.username
 
 
 @router.post("/login")
 async def login(body: LoginRequest, request: Request):
     settings = request.app.state.settings
-    if not secrets.compare_digest(body.password, settings.app_password):
-        raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
+    username = (body.username or settings.owner_username).strip().lower()
+    with request.app.state.db_session_factory() as session:
+        repository = SqlUserAccountRepository(session)
+        try:
+            repository.ensure_owner(
+                username=settings.owner_username,
+                display_name="Paul",
+                password=settings.app_password,
+                initial_capital_mxn=settings.simulated_initial_capital_mxn,
+            )
+            session.commit()
+            user = repository.authenticate(username, body.password)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if user is None:
+            raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+        public = user.to_public_dict()
+        _start_session(request, user)
+    return {"ok": True, "user": public}
 
-    request.session.clear()
-    request.session[SESSION_AUTH_KEY] = True
-    return {"ok": True}
+
+@router.post("/register", status_code=201)
+async def register(body: RegisterRequest, request: Request):
+    settings = request.app.state.settings
+    if not settings.registration_enabled:
+        raise HTTPException(status_code=403, detail="El registro está desactivado.")
+    if not secrets.compare_digest(
+        body.registration_code,
+        settings.user_registration_code,
+    ):
+        raise HTTPException(status_code=403, detail="Código familiar incorrecto.")
+
+    with request.app.state.db_session_factory() as session:
+        repository = SqlUserAccountRepository(session)
+        repository.ensure_owner(
+            username=settings.owner_username,
+            display_name="Paul",
+            password=settings.app_password,
+            initial_capital_mxn=settings.simulated_initial_capital_mxn,
+        )
+        try:
+            user = repository.create(
+                username=body.username,
+                display_name=body.display_name,
+                password=body.password,
+                initial_capital_mxn=settings.simulated_initial_capital_mxn,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        session.commit()
+        session.refresh(user)
+        public = user.to_public_dict()
+        _start_session(request, user)
+    return {
+        "ok": True,
+        "user": public,
+        "message": "Cuenta creada con $5,000 MXN simulados y bot habilitado.",
+    }
+
+
+@router.get("/users")
+async def list_users(request: Request):
+    require_admin(request)
+    with request.app.state.db_session_factory() as session:
+        users = SqlUserAccountRepository(session).list_active()
+    return {"items": users, "count": len(users)}
 
 
 @router.post("/logout")
