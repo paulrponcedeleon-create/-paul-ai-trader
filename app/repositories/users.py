@@ -57,18 +57,25 @@ class SqlUserAccountRepository:
         row = self.get_row_by_username(username)
         return row.to_public_dict() if row else None
 
-    def ensure_owner(self, *, password: str, initial_capital_mxn: Any) -> UserAccount:
+    def ensure_owner(
+        self,
+        *,
+        password: str,
+        initial_capital_mxn: Any,
+        username: str = OWNER_USERNAME,
+        display_name: str = "Paul",
+    ) -> UserAccount:
+        normalized_username = normalize_username(username)
         row = self.get_row(OWNER_USER_ID)
         if row is None:
-            username_owner = self.session.scalar(
-                select(UserAccount).where(UserAccount.username == OWNER_USERNAME)
+            row = self.session.scalar(
+                select(UserAccount).where(UserAccount.username == normalized_username)
             )
-            row = username_owner
         if row is None:
             row = UserAccount(
                 id=OWNER_USER_ID,
-                username=OWNER_USERNAME,
-                display_name="Paul",
+                username=normalized_username,
+                display_name=str(display_name or normalized_username).strip()[:120],
                 password_hash=hash_password(password),
                 is_admin=True,
                 bot_enabled=True,
@@ -83,6 +90,8 @@ class SqlUserAccountRepository:
             row.password_hash = hash_password(password)
         if row.id != OWNER_USER_ID:
             row.id = OWNER_USER_ID
+        row.username = normalized_username
+        row.display_name = str(display_name or row.display_name).strip()[:120]
         row.is_admin = True
         row.is_active = True
         self.session.flush()
