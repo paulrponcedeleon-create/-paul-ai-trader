@@ -1,11 +1,11 @@
 from decimal import Decimal
 
-from app.brokers.persistent_paper import PersistentPaperBroker
+from app.brokers.exploration_persistent_paper import ExplorationPersistentPaperBroker
 from app.repositories.order_events import SqlSimulatedOrderEventRepository
 
 
 def test_automatic_exit_from_exploration_keeps_exploration_source(client):
-    broker = PersistentPaperBroker(
+    broker = ExplorationPersistentPaperBroker(
         session_factory=client.app.state.db_session_factory,
         settings=client.app.state.settings,
     )
