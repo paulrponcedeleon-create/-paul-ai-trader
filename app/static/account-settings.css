@@ -11,6 +11,17 @@
 .account-user-chip strong { font-size: 12px; }
 .account-user-chip small { font-size: 9px; }
 
+#loginCard > p {
+  font-size: 0;
+  margin-bottom: 18px;
+}
+#loginCard > p::after {
+  content: "Ingresa tu usuario y contraseña.";
+  font-size: 18px;
+  line-height: 1.45;
+  color: #344054;
+}
+
 .account-login-grid,
 .account-register-grid,
 .account-bitso-grid {
@@ -23,7 +34,14 @@
 .account-bitso-grid button,
 .account-register-grid .full,
 .account-bitso-grid .full { grid-column: 1 / -1; }
-.account-login-actions { display: flex; gap: 8px; align-items: center; }
+.account-login-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.account-login-actions button { min-height: 44px; }
 
 .account-grid {
   display: grid;
@@ -85,4 +103,10 @@
   .account-register-grid,
   .account-bitso-grid { grid-template-columns: 1fr; }
   .account-user-chip { align-items: flex-start; }
+  .account-login-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .account-login-actions button { width: 100%; }
 }
