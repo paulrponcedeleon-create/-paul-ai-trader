@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -144,6 +145,9 @@ class PaperBroker(BrokerInterface):
             if len(self.engine.portfolio.orders) > before
             else None
         )
+        if order is not None:
+            order = replace(order, reason=reason)
+            self.engine.portfolio.orders[-1] = order
         status = "filled" if position is not None else "rejected"
         return BrokerOrder(
             order.id if order else "paper_rejected",
@@ -172,7 +176,8 @@ class PaperBroker(BrokerInterface):
                     reason=reason,
                     amount_mxn=amount_mxn,
                 )
-                order = self.engine.portfolio.orders[-1]
+                order = replace(self.engine.portfolio.orders[-1], reason=reason)
+                self.engine.portfolio.orders[-1] = order
                 return BrokerOrder(
                     order.id,
                     book,
