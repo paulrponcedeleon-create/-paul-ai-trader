@@ -75,6 +75,35 @@ def _public_account(request: Request, row: UserAccount) -> dict:
     }
 
 
+def _anonymous_learning_summary(rows: list[dict]) -> dict:
+    """Expose aggregate counts only; never source labels containing a person's name."""
+    summary = learning_source_summary(rows)
+    return {
+        "manual_samples": summary.get("manual_samples", 0),
+        "runtime_samples": summary.get("runtime_samples", 0),
+        "exploration_samples": summary.get("exploration_samples", 0),
+        "bot_samples": summary.get("bot_samples", 0),
+        "total_samples": summary.get("total_samples", 0),
+        "active_tracking_samples": summary.get("active_tracking_samples", 0),
+        "completed_result_samples": summary.get("completed_result_samples", 0),
+        "realized_pnl_mxn": summary.get("realized_pnl_mxn", 0.0),
+        "learning_progress": summary.get(
+            "learning_progress",
+            {
+                "completed_results": 0,
+                "minimum_results": 100,
+                "percent": 0.0,
+                "stage": "recolección",
+            },
+        ),
+        "sources": {
+            "manual": summary.get("manual_samples", 0),
+            "bot": summary.get("runtime_samples", 0),
+            "ai": summary.get("exploration_samples", 0),
+        },
+    }
+
+
 @router.get("/account")
 async def account(request: Request):
     return _public_account(request, _current_row(request))
@@ -196,7 +225,7 @@ async def community_learning(request: Request):
         return {
             "enabled": False,
             "participants": 0,
-            "learning_sources": learning_source_summary([]),
+            "learning_sources": _anonymous_learning_summary([]),
         }
     with request.app.state.db_session_factory() as session:
         participant_ids = set(
@@ -212,10 +241,9 @@ async def community_learning(request: Request):
             for row in SqlSimulatedOrderRepository(session, user_id=None).list_closed()
             if row.get("user_id") in participant_ids
         ]
-    summary = learning_source_summary(rows)
     return {
         "enabled": True,
         "participants": len(participant_ids),
         "privacy": "aggregated_without_usernames_or_trade_ids",
-        "learning_sources": summary,
+        "learning_sources": _anonymous_learning_summary(rows),
     }
