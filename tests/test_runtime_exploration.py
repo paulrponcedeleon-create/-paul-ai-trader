@@ -142,6 +142,7 @@ def test_live_mode_blocks_exploration_even_when_setting_is_enabled():
 
 
 def test_runtime_status_api_exposes_separate_exploration_metrics(client):
+    assert client.post("/api/login", json={"password": "test-password"}).status_code == 200
     response = client.get("/runtime/status")
 
     assert response.status_code == 200
