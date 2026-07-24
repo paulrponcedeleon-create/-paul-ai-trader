@@ -24,6 +24,7 @@
     return String(value).replaceAll('_', ' ');
   };
 
+  const money = value => Number(value || 0).toLocaleString('es-MX', {style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2});
   const metric = (label, value, help = '') => `<div class="module-metric"><span>${label}${help ? `<small class="muted">${help}</small>` : ''}</span><strong>${value}</strong></div>`;
 
   function friendlyRender(name, data) {
@@ -41,10 +42,13 @@
         metric('Fuente de precios', data.provider_label || 'Bitso, solo lectura'),
         metric('Tipo de dinero', data.broker_label || 'Dinero simulado'),
         metric('Última decisión', data.last_decision?.action ? String(data.last_decision.action).toUpperCase() : 'Esperando suficientes datos'),
-        metric('Experiencia exploratoria', exploration.enabled ? 'Activa solo en simulación' : 'Desactivada', 'Nunca opera con dinero real y sigue las reglas de riesgo.'),
+        metric('Experiencia exploratoria autónoma', exploration.enabled ? 'Activa solo en simulación' : 'Desactivada', 'Nunca opera con dinero real y sigue las reglas de riesgo.'),
         metric('HOLD consecutivos', text(maxHolds), `Entrada exploratoria después de ${text(exploration.hold_cycles_before_entry ?? 20)} ciclos.`),
-        metric('Exploraciones activas', text(exploration.active_positions ?? 0)),
-        metric('Experiencias completadas', `${text(exploration.entries ?? 0)} entradas · ${text(exploration.exits ?? 0)} salidas`),
+        metric('Experiencias activas', `${text(exploration.active_positions ?? 0)} / ${text(exploration.max_positions ?? 0)}`),
+        metric('Intentos exploratorios', text(exploration.attempts ?? 0)),
+        metric('Experiencias completadas · Operaciones completas', text(exploration.completed_trades ?? exploration.exits ?? 0), 'Cada operación completa incluye BUY y SELL.'),
+        metric('Resultados', `${text(exploration.wins ?? 0)} ganadas · ${text(exploration.losses ?? 0)} perdidas · ${text(exploration.flat ?? 0)} neutras`),
+        metric('P&L exploratorio', money(exploration.realized_pnl_mxn ?? 0), 'Separado del rendimiento normal de la estrategia.'),
         metric('Última experiencia', lastExperienceText),
         metric('Último problema', data.last_error ? 'Se detectó un problema y se reintentará' : 'Ninguno')
       ].join('');
@@ -130,7 +134,7 @@
     setDot('#statusRuntimeDot', Boolean(runtime?.running)); setDot('#statusMarketDot', Boolean(health)); setDot('#statusDatabaseDot', databaseOk === true);
     setText('#systemLastUpdated', new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit', second: '2-digit'}));
     setText('#overviewPaperState', runtime?.running ? 'Simulación automática activa' : 'Preparando simulación');
-    setText('#overviewPaperDetail', runtime?.exploration?.enabled ? 'Analiza precios y genera experiencia controlada cuando hay demasiados HOLD.' : 'El sistema analiza precios y puede abrir o cerrar operaciones con dinero simulado.');
+    setText('#overviewPaperDetail', runtime?.exploration?.enabled ? 'Analiza precios y genera operaciones completas de compra y venta simuladas.' : 'El sistema analiza precios y puede abrir o cerrar operaciones con dinero simulado.');
     setText('#overviewStrategyState', runtime?.last_decision?.action ? `Última decisión: ${String(runtime.last_decision.action).toUpperCase()}` : 'Recopilando datos');
     setText('#overviewValidationState', validation?.status === 'idle' ? 'Aprendiendo del historial' : text(validation?.status));
     setText('#overviewValidationDetail', 'Las estrategias se evaluarán cuando exista suficiente historial de operaciones.');

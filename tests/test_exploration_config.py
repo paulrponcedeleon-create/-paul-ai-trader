@@ -13,6 +13,7 @@ def test_exploration_defaults_are_active_only_for_paper_simulation():
     live = Settings(_env_file=None, app_env="test", live_trading=True)
 
     assert simulation.paper_exploration_active is True
+    assert simulation.paper_exploration_max_positions == 3
     assert live.paper_exploration_active is False
 
 
@@ -41,4 +42,13 @@ def test_exploration_cycle_limits_are_validated():
             _env_file=None,
             app_env="test",
             paper_exploration_max_holding_cycles=0,
+        )
+
+
+def test_exploration_capacity_is_validated():
+    with pytest.raises(ValidationError, match="PAPER_EXPLORATION_MAX_POSITIONS"):
+        Settings(
+            _env_file=None,
+            app_env="test",
+            paper_exploration_max_positions=0,
         )

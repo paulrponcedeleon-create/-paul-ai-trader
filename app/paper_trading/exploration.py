@@ -12,6 +12,7 @@ class ExplorationConfig:
     max_holding_cycles: int = 20
     cooldown_cycles: int = 40
     amount_mxn: Decimal = Decimal("10.00")
+    max_positions: int = 3
 
     def __post_init__(self) -> None:
         if self.hold_cycles_before_entry < 1:
@@ -22,6 +23,8 @@ class ExplorationConfig:
             raise ValueError("cooldown_cycles no puede ser negativo.")
         if self.amount_mxn <= Decimal("0"):
             raise ValueError("amount_mxn debe ser mayor que cero.")
+        if self.max_positions < 1:
+            raise ValueError("max_positions debe ser mayor que cero.")
 
 
 @dataclass
@@ -30,9 +33,11 @@ class ExplorationState:
     holding_cycles: int = 0
     cooldown_remaining: int = 0
     active: bool = False
+    attempts: int = 0
     entries: int = 0
     exits: int = 0
     rejected: int = 0
+    capacity_blocks: int = 0
     last_action: str | None = None
     last_reason: str | None = None
 
@@ -42,9 +47,11 @@ class ExplorationState:
             "holding_cycles": self.holding_cycles,
             "cooldown_remaining": self.cooldown_remaining,
             "active": self.active,
+            "attempts": self.attempts,
             "entries": self.entries,
             "exits": self.exits,
             "rejected": self.rejected,
+            "capacity_blocks": self.capacity_blocks,
             "last_action": self.last_action,
             "last_reason": self.last_reason,
         }
@@ -68,6 +75,7 @@ class PaperExplorationPolicy:
 
     ENTRY_REASON = "paper_exploration_hold_streak"
     EXIT_REASON = "paper_exploration_timeout"
+    CAPACITY_REASON = "paper_exploration_global_limit"
 
     def __init__(self, config: ExplorationConfig | None = None) -> None:
         self.config = config or ExplorationConfig()
@@ -103,6 +111,7 @@ class PaperExplorationPolicy:
         has_position: bool,
         live_trading: bool,
         exploration_position: bool = False,
+        active_exploration_positions: int = 0,
     ) -> ExplorationAction | None:
         state = self.state_for(book)
         action = str(strategy_action or "hold").lower()
@@ -146,6 +155,12 @@ class PaperExplorationPolicy:
         if state.consecutive_holds < self.config.hold_cycles_before_entry:
             return None
 
+        if active_exploration_positions >= self.config.max_positions:
+            state.capacity_blocks += 1
+            state.last_action = "hold"
+            state.last_reason = self.CAPACITY_REASON
+            return None
+
         state.consecutive_holds = 0
         return ExplorationAction(
             action="buy",
@@ -162,6 +177,7 @@ class PaperExplorationPolicy:
         filled: bool,
     ) -> None:
         state = self.state_for(book)
+        state.attempts += 1
         state.last_action = action
         state.last_reason = reason
         if not filled:
