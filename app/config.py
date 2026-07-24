@@ -207,10 +207,9 @@ class Settings(BaseSettings):
             if self.registration_enabled and (
                 len(self.user_registration_code.strip()) < 12
                 or self.user_registration_code == DEVELOPMENT_REGISTRATION_CODE
+                or "replace-with" in self.user_registration_code.lower()
             ):
-                raise ValueError(
-                    "USER_REGISTRATION_CODE debe ser distinto al ejemplo y tener al menos 12 caracteres en producción."
-                )
+                self.registration_enabled = False
             if not self.resolved_session_cookie_secure:
                 raise ValueError(
                     "Las cookies de sesión deben ser seguras en producción."
