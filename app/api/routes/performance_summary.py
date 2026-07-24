@@ -16,7 +16,7 @@ router = APIRouter(tags=["performance"])
 async def performance_summary(
     request: Request,
     books: str | None = Query(default=None),
-    timezone_name: str = Query(default="America/Chihuahua", alias="timezone"),
+    timezone_name: str = Query(default="America/Ciudad_Juarez", alias="timezone"),
 ):
     require_auth(request)
     selected_books = {
