@@ -27,14 +27,28 @@
   const metric = (label, value, help = '') => `<div class="module-metric"><span>${label}${help ? `<small class="muted">${help}</small>` : ''}</span><strong>${value}</strong></div>`;
 
   function friendlyRender(name, data) {
-    if (name === 'runtime') return [
-      metric('Motor automático', data.running ? 'Trabajando' : 'Iniciando', 'Analiza el mercado y toma decisiones con dinero simulado.'),
-      metric('Ciclos completados', text(data.cycles), 'Cada ciclo revisa los activos configurados.'),
-      metric('Fuente de precios', data.provider_label || 'Bitso, solo lectura'),
-      metric('Tipo de dinero', data.broker_label || 'Dinero simulado'),
-      metric('Última decisión', data.last_decision?.action ? String(data.last_decision.action).toUpperCase() : 'Esperando suficientes datos'),
-      metric('Último problema', data.last_error ? 'Se detectó un problema y se reintentará' : 'Ninguno')
-    ].join('');
+    if (name === 'runtime') {
+      const exploration = data.exploration || {};
+      const states = Object.values(exploration.states || {});
+      const maxHolds = states.length ? Math.max(...states.map(item => Number(item.consecutive_holds || 0))) : 0;
+      const lastExperience = exploration.last_experience;
+      const lastExperienceText = lastExperience?.book
+        ? `${String(lastExperience.action || lastExperience.side || '').toUpperCase()} ${String(lastExperience.book).toUpperCase()}`
+        : 'Todavía no hay una experiencia completa';
+      return [
+        metric('Motor automático', data.running ? 'Trabajando' : 'Iniciando', 'Analiza el mercado y toma decisiones con dinero simulado.'),
+        metric('Ciclos completados', text(data.cycles), 'Cada ciclo revisa los activos configurados.'),
+        metric('Fuente de precios', data.provider_label || 'Bitso, solo lectura'),
+        metric('Tipo de dinero', data.broker_label || 'Dinero simulado'),
+        metric('Última decisión', data.last_decision?.action ? String(data.last_decision.action).toUpperCase() : 'Esperando suficientes datos'),
+        metric('Experiencia exploratoria', exploration.enabled ? 'Activa solo en simulación' : 'Desactivada', 'Nunca opera con dinero real y sigue las reglas de riesgo.'),
+        metric('HOLD consecutivos', text(maxHolds), `Entrada exploratoria después de ${text(exploration.hold_cycles_before_entry ?? 20)} ciclos.`),
+        metric('Exploraciones activas', text(exploration.active_positions ?? 0)),
+        metric('Experiencias completadas', `${text(exploration.entries ?? 0)} entradas · ${text(exploration.exits ?? 0)} salidas`),
+        metric('Última experiencia', lastExperienceText),
+        metric('Último problema', data.last_error ? 'Se detectó un problema y se reintentará' : 'Ninguno')
+      ].join('');
+    }
     if (name === 'validation') return [
       metric('Estado', data.status === 'idle' ? 'Esperando historial suficiente' : text(data.status), 'Aquí se decide qué estrategias merecen seguir usándose.'),
       metric('Operaciones registradas', text(data.runs ?? 0)),
@@ -116,7 +130,7 @@
     setDot('#statusRuntimeDot', Boolean(runtime?.running)); setDot('#statusMarketDot', Boolean(health)); setDot('#statusDatabaseDot', databaseOk === true);
     setText('#systemLastUpdated', new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit', second: '2-digit'}));
     setText('#overviewPaperState', runtime?.running ? 'Simulación automática activa' : 'Preparando simulación');
-    setText('#overviewPaperDetail', 'El sistema analiza precios y puede abrir o cerrar operaciones con dinero simulado.');
+    setText('#overviewPaperDetail', runtime?.exploration?.enabled ? 'Analiza precios y genera experiencia controlada cuando hay demasiados HOLD.' : 'El sistema analiza precios y puede abrir o cerrar operaciones con dinero simulado.');
     setText('#overviewStrategyState', runtime?.last_decision?.action ? `Última decisión: ${String(runtime.last_decision.action).toUpperCase()}` : 'Recopilando datos');
     setText('#overviewValidationState', validation?.status === 'idle' ? 'Aprendiendo del historial' : text(validation?.status));
     setText('#overviewValidationDetail', 'Las estrategias se evaluarán cuando exista suficiente historial de operaciones.');
