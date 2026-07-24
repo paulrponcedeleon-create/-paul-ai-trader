@@ -31,20 +31,19 @@ async def partial_close(
     body: PartialCloseRequest,
     request: Request,
 ):
-    require_auth(request)
+    user_id = require_auth(request)
     if body.amount_mxn is None:
         raise HTTPException(status_code=422, detail="Indica el monto que deseas vender.")
 
     requested_amount = quantize_money(body.amount_mxn)
-    session_factory = request.app.state.db_session_factory
-    with session_factory() as session:
-        repository = SqlSimulatedOrderRepository(session)
+    with request.app.state.db_session_factory() as session:
+        repository = SqlSimulatedOrderRepository(session, user_id=user_id)
         open_order = repository.get_open(simulation_id)
 
     if open_order is None:
         raise HTTPException(
             status_code=404,
-            detail="La posición no existe o ya fue cerrada.",
+            detail="La posición no existe, pertenece a otra cuenta o ya fue cerrada.",
         )
 
     open_amount = quantize_money(open_order["amount_mxn"])
@@ -74,9 +73,11 @@ async def partial_close(
     closed_at = datetime.now(timezone.utc)
     closed_lot_id = f"lot_{secrets.token_hex(6)}"
 
-    with session_factory() as session:
-        repository = SqlSimulatedOrderRepository(session)
-        event_repository = SqlSimulatedOrderEventRepository(session)
+    with request.app.state.db_session_factory() as session:
+        repository = SqlSimulatedOrderRepository(session, user_id=user_id)
+        event_repository = SqlSimulatedOrderEventRepository(
+            session, user_id=user_id
+        )
         try:
             result = repository.close_partial(
                 simulation_id,
@@ -95,6 +96,7 @@ async def partial_close(
         closed_lot, remaining_position = result
         event_repository.add(
             {
+                "user_id": user_id,
                 "id": f"evt_{secrets.token_hex(8)}",
                 "created_at": closed_at,
                 "position_id": closed_lot_id,
@@ -118,4 +120,5 @@ async def partial_close(
         "remaining_position": remaining_position,
         "realized_pnl_mxn": float(realized_pnl),
         "fee_mxn": float(exit_fee),
+        "closed_by": "manual",
     }

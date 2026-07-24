@@ -5,7 +5,26 @@ from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
+    username: str | None = None
     password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    display_name: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=8, max_length=200)
+    registration_code: str
+
+
+class AccountPreferencesRequest(BaseModel):
+    bot_enabled: bool | None = None
+    ai_exploration_enabled: bool | None = None
+    shared_learning_enabled: bool | None = None
+
+
+class BitsoCredentialsRequest(BaseModel):
+    api_key: str = Field(min_length=8, max_length=300)
+    api_secret: str = Field(min_length=8, max_length=500)
 
 
 class SimulatedOrderRequest(BaseModel):

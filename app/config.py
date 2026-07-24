@@ -11,6 +11,7 @@ DEVELOPMENT_APP_PASSWORD = "paul-demo"
 DEVELOPMENT_SESSION_SECRET = "development-only-change-this-session-secret"
 EXAMPLE_APP_PASSWORD = "replace-with-a-local-password"
 EXAMPLE_SESSION_SECRET = "replace-with-a-random-string-of-at-least-32-characters"
+DEVELOPMENT_REGISTRATION_CODE = "family-demo"
 DEFAULT_SIMULATION_BOOKS = (
     "btc_mxn,eth_mxn,sol_mxn,xrp_mxn,usdt_mxn,"
     "algn_mxn,tsla_mxn,aapl_mxn"
@@ -21,6 +22,11 @@ class Settings(BaseSettings):
     app_name: str = "Paul AI Trader"
     app_env: Environment = "development"
     app_password: str = DEVELOPMENT_APP_PASSWORD
+    owner_username: str = "paul"
+    registration_enabled: bool = True
+    user_registration_code: str = DEVELOPMENT_REGISTRATION_CODE
+    credential_encryption_key: str = ""
+    community_learning_enabled: bool = True
     session_secret: str = DEVELOPMENT_SESSION_SECRET
     session_cookie_name: str = "paul_ai_session"
     session_cookie_secure: bool | None = None
@@ -131,6 +137,8 @@ class Settings(BaseSettings):
             raise ValueError("RUNTIME_LOOP_INTERVAL_SECONDS debe ser de al menos 5 segundos.")
         if self.runtime_history_points < 20 or self.runtime_history_points > 500:
             raise ValueError("RUNTIME_HISTORY_POINTS debe estar entre 20 y 500.")
+        if not self.owner_username.strip():
+            raise ValueError("OWNER_USERNAME no puede estar vacío.")
         for name, value in {
             "PAPER_STOP_LOSS_PCT": self.paper_stop_loss_pct,
             "PAPER_TAKE_PROFIT_PCT": self.paper_take_profit_pct,
@@ -166,14 +174,12 @@ class Settings(BaseSettings):
             )
         if self.runtime_broker != "paper" and not self.live_trading:
             raise ValueError("Con LIVE_TRADING=false, RUNTIME_BROKER debe permanecer en paper.")
-
         if self.session_cookie_samesite == "none" and not self.resolved_session_cookie_secure:
             raise ValueError("SameSite=None requiere SESSION_COOKIE_SECURE=true.")
 
         database_url = self.database_url.strip()
         if not database_url:
             raise ValueError("DATABASE_URL no puede estar vacío.")
-
         if not self.live_books_set:
             raise ValueError("ALLOWED_BOOKS debe contener al menos un mercado.")
         if not self.simulation_books_set:
@@ -198,6 +204,12 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "APP_PASSWORD debe configurarse explícitamente en producción."
                 )
+            if self.registration_enabled and (
+                len(self.user_registration_code.strip()) < 12
+                or self.user_registration_code == DEVELOPMENT_REGISTRATION_CODE
+                or "replace-with" in self.user_registration_code.lower()
+            ):
+                self.registration_enabled = False
             if not self.resolved_session_cookie_secure:
                 raise ValueError(
                     "Las cookies de sesión deben ser seguras en producción."

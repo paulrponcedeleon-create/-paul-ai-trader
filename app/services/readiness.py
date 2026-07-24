@@ -9,7 +9,11 @@ from sqlalchemy.engine import Engine
 
 from app.config import Settings
 
-REQUIRED_TABLES = ("simulated_orders",)
+REQUIRED_TABLES = (
+    "user_accounts",
+    "simulated_orders",
+    "simulated_order_events",
+)
 
 
 @dataclass(frozen=True)
@@ -17,6 +21,11 @@ class ReadinessResult:
     ready: bool
     status_code: int
     payload: dict[str, Any]
+
+
+def _bool_setting(settings: Any, name: str, default: bool = False) -> bool:
+    """Read optional settings without requiring them on legacy test doubles."""
+    return bool(getattr(settings, name, default))
 
 
 def check_readiness(settings: Settings, engine: Engine) -> ReadinessResult:
@@ -48,6 +57,15 @@ def _check_config(
     checks["trading_mode"] = {
         "ok": True,
         "mode": "live" if settings.live_trading else "simulation",
+    }
+    checks["multiuser"] = {
+        "ok": True,
+        "registration_enabled": _bool_setting(
+            settings, "registration_enabled"
+        ),
+        "community_learning_enabled": _bool_setting(
+            settings, "community_learning_enabled"
+        ),
     }
     if not valid:
         errors.append("Configuración inválida.")

@@ -9,7 +9,9 @@ from app.api.dependencies import require_auth
 from app.models import SimulatedOrderRequest
 from app.repositories.order_events import SqlSimulatedOrderEventRepository
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
+from app.repositories.users import OWNER_USER_ID
 from app.services.bitso import BitsoError
+from app.services.current_account import user_initial_capital_mxn
 from app.services.money import (
     public_money,
     quantize_money,
@@ -116,17 +118,14 @@ async def market(book: str, request: Request, response: Response):
 
 @router.get("/positions")
 async def positions(request: Request, response: Response):
-    require_auth(request)
+    user_id = require_auth(request)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
-    settings = request.app.state.settings
-    session_factory = request.app.state.db_session_factory
-    with session_factory() as db_session:
-        repository = SqlSimulatedOrderRepository(db_session)
+    initial_capital = user_initial_capital_mxn(request, user_id)
+    with request.app.state.db_session_factory() as db_session:
+        repository = SqlSimulatedOrderRepository(db_session, user_id=user_id)
         open_orders = repository.list_open()
-        ledger_decimal = repository.capital_ledger_decimal(
-            settings.simulated_initial_capital_mxn
-        )
+        ledger_decimal = repository.capital_ledger_decimal(initial_capital)
     ledger = _public_ledger(ledger_decimal)
 
     service = _market_service(request)
@@ -164,27 +163,30 @@ async def positions(request: Request, response: Response):
         + to_decimal(summary["current_value_mxn"])
     )
     return {
+        "user_id": user_id,
         "items": items,
         "summary": summary,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "refresh_seconds": 5,
         "fees_included": True,
-        "fee_source": "mixed"
-        if len(fee_sources) > 1
-        else next(iter(fee_sources), "none"),
+        "fee_source": (
+            "mixed"
+            if len(fee_sources) > 1
+            else next(iter(fee_sources), "none")
+        ),
     }
 
 
 @router.post("/simulations/{simulation_id}/close")
 async def close_simulation(simulation_id: str, request: Request):
-    require_auth(request)
-    session_factory = request.app.state.db_session_factory
-    with session_factory() as db_session:
-        repository = SqlSimulatedOrderRepository(db_session)
+    user_id = require_auth(request)
+    with request.app.state.db_session_factory() as db_session:
+        repository = SqlSimulatedOrderRepository(db_session, user_id=user_id)
         open_order = repository.get_open(simulation_id)
     if open_order is None:
         raise HTTPException(
-            status_code=404, detail="La posición no existe o ya fue cerrada."
+            status_code=404,
+            detail="La posición no existe, pertenece a otra cuenta o ya fue cerrada.",
         )
     try:
         quote = await _market_service(request).quote(
@@ -200,9 +202,11 @@ async def close_simulation(simulation_id: str, request: Request):
     exit_fee = quantize_money(calculated["estimated_exit_fee_mxn"])
     realized_pnl = quantize_money(calculated["unrealized_pnl_mxn"])
     closed_at = datetime.now(timezone.utc)
-    with session_factory() as db_session:
-        repository = SqlSimulatedOrderRepository(db_session)
-        event_repository = SqlSimulatedOrderEventRepository(db_session)
+    with request.app.state.db_session_factory() as db_session:
+        repository = SqlSimulatedOrderRepository(db_session, user_id=user_id)
+        event_repository = SqlSimulatedOrderEventRepository(
+            db_session, user_id=user_id
+        )
         closed = repository.close(
             simulation_id,
             closed_at=closed_at,
@@ -215,6 +219,7 @@ async def close_simulation(simulation_id: str, request: Request):
             raise HTTPException(status_code=409, detail="La posición ya fue cerrada.")
         event_repository.add(
             {
+                "user_id": user_id,
                 "id": f"evt_{secrets.token_hex(8)}",
                 "created_at": closed_at,
                 "position_id": simulation_id,
@@ -239,12 +244,13 @@ async def close_simulation(simulation_id: str, request: Request):
         "current_value_mxn": calculated["current_value_mxn"],
         "return_pct": calculated["return_pct"],
         "total_estimated_fees_mxn": calculated["total_estimated_fees_mxn"],
+        "closed_by": "manual",
     }
 
 
 @router.post("/orders")
 async def order(body: SimulatedOrderRequest, request: Request):
-    require_auth(request)
+    user_id = require_auth(request)
     settings = request.app.state.settings
     decision = validate_order(
         body.book,
@@ -263,13 +269,11 @@ async def order(body: SimulatedOrderRequest, request: Request):
         )
 
     requested_amount = quantize_money(body.amount_mxn)
-    session_factory = request.app.state.db_session_factory
+    initial_capital = user_initial_capital_mxn(request, user_id)
     if not settings.live_trading:
-        with session_factory() as db_session:
-            repository = SqlSimulatedOrderRepository(db_session)
-            ledger = repository.capital_ledger_decimal(
-                settings.simulated_initial_capital_mxn
-            )
+        with request.app.state.db_session_factory() as db_session:
+            repository = SqlSimulatedOrderRepository(db_session, user_id=user_id)
+            ledger = repository.capital_ledger_decimal(initial_capital)
         available = ledger["available_cash_mxn"]
         if requested_amount > available:
             raise HTTPException(
@@ -284,10 +288,16 @@ async def order(body: SimulatedOrderRequest, request: Request):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     if not quote["tradeable"]:
         raise HTTPException(
-            status_code=403, detail="Este activo es informativo y no abre posiciones."
+            status_code=403,
+            detail="Este activo es informativo y no abre posiciones.",
         )
 
     if settings.live_trading:
+        if user_id != OWNER_USER_ID:
+            raise HTTPException(
+                status_code=403,
+                detail="Las cuentas familiares permanecen bloqueadas para dinero real.",
+            )
         if quote["asset_type"] != "crypto" or quote["route"] != [book]:
             raise HTTPException(
                 status_code=403,
@@ -306,9 +316,11 @@ async def order(body: SimulatedOrderRequest, request: Request):
     entry_fee = quantize_money(requested_amount * entry_fee_rate)
     created_at = datetime.now(timezone.utc)
     item = {
+        "user_id": user_id,
         "id": secrets.token_hex(6),
         "created_at": created_at,
         "status": "open",
+        "source": "manual",
         "book": book,
         "side": "buy",
         "amount_mxn": requested_amount,
@@ -317,12 +329,15 @@ async def order(body: SimulatedOrderRequest, request: Request):
         "entry_fee_mxn": entry_fee,
         "risk_check": decision.reason,
     }
-    with session_factory() as db_session:
-        repository = SqlSimulatedOrderRepository(db_session)
-        event_repository = SqlSimulatedOrderEventRepository(db_session)
+    with request.app.state.db_session_factory() as db_session:
+        repository = SqlSimulatedOrderRepository(db_session, user_id=user_id)
+        event_repository = SqlSimulatedOrderEventRepository(
+            db_session, user_id=user_id
+        )
         saved_item = add_simulation(item, repository)
         event_repository.add(
             {
+                "user_id": user_id,
                 "id": f"evt_{secrets.token_hex(8)}",
                 "created_at": created_at,
                 "position_id": saved_item["id"],
@@ -337,9 +352,7 @@ async def order(body: SimulatedOrderRequest, request: Request):
             }
         )
         db_session.commit()
-        ledger_after = repository.capital_ledger(
-            settings.simulated_initial_capital_mxn
-        )
+        ledger_after = repository.capital_ledger(initial_capital)
     return {
         **saved_item,
         "status": "simulated",

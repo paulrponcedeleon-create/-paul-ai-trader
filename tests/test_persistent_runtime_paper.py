@@ -150,6 +150,9 @@ def test_runtime_route_uses_persistent_paper_broker(tmp_path, fake_bitso):
     application = create_app(settings, fake_bitso)
 
     with TestClient(application) as client:
+        assert client.post(
+            "/api/login", json={"password": "test-password"}
+        ).status_code == 200
         response = client.get("/runtime/status")
         assert response.status_code == 200
         assert response.json()["broker_label"] == "Dinero simulado"

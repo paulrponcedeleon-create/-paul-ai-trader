@@ -21,15 +21,14 @@ async def order_events(
     side: str | None = Query(default=None, pattern="^(buy|sell)$"),
     source: str | None = Query(default=None),
 ):
-    require_auth(request)
+    user_id = require_auth(request)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     selected_books = {
         item.strip().lower() for item in (books or "").split(",") if item.strip()
     }
-    session_factory = request.app.state.db_session_factory
-    with session_factory() as session:
-        repository = SqlSimulatedOrderEventRepository(session)
+    with request.app.state.db_session_factory() as session:
+        repository = SqlSimulatedOrderEventRepository(session, user_id=user_id)
         items = repository.list(
             limit=limit,
             offset=offset,
@@ -59,7 +58,7 @@ async def release_info(request: Request):
     require_auth(request)
     commit = os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT") or "local"
     branch = os.getenv("RENDER_GIT_BRANCH") or "v2-dashboard"
-    release = os.getenv("APP_RELEASE") or "Gate 1 · Contabilidad Decimal"
+    release = os.getenv("APP_RELEASE") or "Gate 2 · Multiusuario Paper"
     return {
         "release": release,
         "branch": branch,

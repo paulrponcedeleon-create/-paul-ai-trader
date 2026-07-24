@@ -8,7 +8,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api.dependencies import authenticated, require_auth
+from app.api.dependencies import (
+    authenticated,
+    current_user_id,
+    current_username,
+    require_auth,
+)
+from app.api.routes.account import user_bitso_balance
 from app.api.routes.adaptive import router as adaptive_router
 from app.api.routes.ai import router as ai_router
 from app.api.routes.analytics import router as analytics_router
@@ -28,10 +34,14 @@ from app.api.routes.runtime import shutdown_runtime, startup_runtime
 from app.api.routes.system import router as system_router
 from app.api.routes.validation import router as validation_router
 from app.config import Settings, settings
+from app.db import models as _models  # noqa: F401
+from app.db import order_models as _order_models  # noqa: F401
+from app.db import user_models as _user_models  # noqa: F401
 from app.db.base import Base
 from app.db.session import build_engine, build_session_factory
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
-from app.services.bitso import BitsoClient, BitsoError
+from app.repositories.users import SqlUserAccountRepository
+from app.services.bitso import BitsoClient
 from app.services.performance import resolve_period_range, summarize_closed_orders
 from app.services.store import list_simulations
 
@@ -48,13 +58,24 @@ def create_app(
     engine = build_engine(current_settings)
     session_factory = build_session_factory(engine)
 
-    # Tests use isolated temporary databases. Real environments must apply
-    # schema changes through Alembic so alembic_version remains authoritative.
-    if current_settings.app_env == "test":
+    if getattr(current_settings, "app_env", "development") == "test":
         Base.metadata.create_all(bind=engine)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
+        application.state.owner_bootstrap_error = None
+        try:
+            with session_factory() as session:
+                SqlUserAccountRepository(session).ensure_owner(
+                    username=getattr(current_settings, "owner_username", "paul"),
+                    display_name="Paul",
+                    password=current_settings.app_password,
+                    initial_capital_mxn=current_settings.simulated_initial_capital_mxn,
+                )
+                session.commit()
+        except Exception as exc:
+            application.state.owner_bootstrap_error = f"{type(exc).__name__}: {exc}"
+
         try:
             await startup_runtime(application)
             yield
@@ -105,9 +126,22 @@ def create_app(
     application.include_router(validation_router)
 
     def template_context(request: Request) -> dict:
+        user_id = current_user_id(request)
+        user = None
+        if user_id:
+            try:
+                with session_factory() as session:
+                    user = SqlUserAccountRepository(session).get_by_id(user_id)
+            except Exception:
+                user = None
         return {
             "app_name": current_settings.app_name,
             "authenticated": authenticated(request),
+            "current_user": user,
+            "current_username": current_username(request),
+            "registration_enabled": bool(
+                getattr(current_settings, "registration_enabled", False)
+            ),
             "live_trading": current_settings.live_trading,
             "max_order": current_settings.max_order_mxn,
             "allowed_books": sorted(current_settings.allowed_books_set),
@@ -138,25 +172,32 @@ def create_app(
 
     @application.get("/api/config")
     async def config(request: Request):
-        require_auth(request)
-        return {
-            "mode": "LIVE" if current_settings.live_trading else "SIMULATION",
-            "allowed_books": sorted(current_settings.allowed_books_set),
-            "max_order_mxn": current_settings.max_order_mxn,
-            "max_daily_loss_mxn": current_settings.max_daily_loss_mxn,
-            "max_open_orders": current_settings.max_open_orders,
-            "bitso_connected": bool(
-                current_settings.bitso_api_key and current_settings.bitso_api_secret
-            ),
-        }
+        user_id = require_auth(request)
+        with session_factory() as session:
+            user = SqlUserAccountRepository(session).get_row(user_id)
+            if user is None:
+                raise HTTPException(status_code=401, detail="Cuenta no disponible.")
+            return {
+                "mode": "LIVE" if current_settings.live_trading else "SIMULATION",
+                "allowed_books": sorted(current_settings.allowed_books_set),
+                "max_order_mxn": current_settings.max_order_mxn,
+                "max_daily_loss_mxn": current_settings.max_daily_loss_mxn,
+                "max_open_orders": current_settings.max_open_orders,
+                "simulated_initial_capital_mxn": float(
+                    user.simulated_initial_capital_mxn
+                ),
+                "bot_enabled": user.bot_enabled,
+                "ai_exploration_enabled": user.ai_exploration_enabled,
+                "shared_learning_enabled": user.shared_learning_enabled,
+                "bitso_connected": bool(
+                    user.bitso_api_key_encrypted and user.bitso_api_secret_encrypted
+                ),
+                "user": user.to_public_dict(),
+            }
 
     @application.get("/api/balance")
     async def balance(request: Request):
-        require_auth(request)
-        try:
-            return await current_bitso.balance()
-        except BitsoError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return await user_bitso_balance(request)
 
     @application.get("/api/simulations")
     async def simulations(
@@ -190,7 +231,8 @@ def create_app(
         invalid_books = selected_books - current_settings.allowed_books_set
         if invalid_books:
             raise HTTPException(
-                status_code=403, detail="Una o más criptomonedas no están autorizadas."
+                status_code=403,
+                detail="Una o más criptomonedas no están autorizadas.",
             )
 
         try:
