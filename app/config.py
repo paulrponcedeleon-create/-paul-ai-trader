@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     app_env: Environment = "development"
     app_password: str = DEVELOPMENT_APP_PASSWORD
     owner_username: str = "paul"
+    owner_email: str = ""
     registration_enabled: bool = True
     user_registration_code: str = DEVELOPMENT_REGISTRATION_CODE
     credential_encryption_key: str = ""
@@ -32,6 +33,15 @@ class Settings(BaseSettings):
     session_cookie_secure: bool | None = None
     session_cookie_samesite: SameSitePolicy = "lax"
     session_max_age_seconds: int = 60 * 60 * 12
+
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_use_tls: bool = True
+    smtp_timeout_seconds: int = 15
+    password_reset_token_minutes: int = 30
 
     bitso_base_url: str = "https://api.bitso.com/api/v3"
     bitso_api_key: str = ""
@@ -96,6 +106,10 @@ class Settings(BaseSettings):
         return self.is_production
 
     @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host.strip() and self.smtp_from_email.strip())
+
+    @property
     def paper_exploration_active(self) -> bool:
         return (
             self.paper_exploration_enabled
@@ -139,6 +153,16 @@ class Settings(BaseSettings):
             raise ValueError("RUNTIME_HISTORY_POINTS debe estar entre 20 y 500.")
         if not self.owner_username.strip():
             raise ValueError("OWNER_USERNAME no puede estar vacío.")
+        if self.smtp_port <= 0 or self.smtp_port > 65535:
+            raise ValueError("SMTP_PORT debe estar entre 1 y 65535.")
+        if self.smtp_timeout_seconds < 1 or self.smtp_timeout_seconds > 120:
+            raise ValueError("SMTP_TIMEOUT_SECONDS debe estar entre 1 y 120.")
+        if self.password_reset_token_minutes < 5 or self.password_reset_token_minutes > 1440:
+            raise ValueError("PASSWORD_RESET_TOKEN_MINUTES debe estar entre 5 y 1440.")
+        if self.smtp_host.strip() and not self.smtp_from_email.strip():
+            raise ValueError("SMTP_FROM_EMAIL es obligatorio cuando SMTP_HOST está configurado.")
+        if self.smtp_username.strip() and not self.smtp_password:
+            raise ValueError("SMTP_PASSWORD es obligatorio cuando SMTP_USERNAME está configurado.")
         for name, value in {
             "PAPER_STOP_LOSS_PCT": self.paper_stop_loss_pct,
             "PAPER_TAKE_PROFIT_PCT": self.paper_take_profit_pct,
