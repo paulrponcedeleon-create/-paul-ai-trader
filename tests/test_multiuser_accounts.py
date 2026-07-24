@@ -39,6 +39,7 @@ def test_family_registration_creates_independent_5000_account(client):
         json={
             "username": "papa",
             "display_name": "Papá",
+            "email": "papa@example.com",
             "password": "password-papa",
             "registration_code": "family-demo",
         },
@@ -46,6 +47,7 @@ def test_family_registration_creates_independent_5000_account(client):
 
     assert response.status_code == 201
     assert response.json()["user"]["username"] == "papa"
+    assert response.json()["user"]["email"] == "papa@example.com"
     assert response.json()["user"]["simulated_initial_capital_mxn"] == 5000.0
     account = client.get("/api/account").json()
     assert account["simulation"]["available_cash_mxn"] == 5000.0
@@ -60,6 +62,7 @@ def test_wrong_family_code_is_rejected(client):
         json={
             "username": "hermano",
             "display_name": "Hermano",
+            "email": "hermano@example.com",
             "password": "password-hermano",
             "registration_code": "wrong-code",
         },
@@ -83,6 +86,7 @@ def test_user_positions_and_capital_are_isolated(client):
         json={
             "username": "papa",
             "display_name": "Papá",
+            "email": "papa@example.com",
             "password": "password-papa",
             "registration_code": "family-demo",
         },
@@ -119,6 +123,7 @@ def test_bot_ai_and_shared_learning_preferences_persist(client):
         json={
             "username": "hermano",
             "display_name": "Hermano",
+            "email": "hermano@example.com",
             "password": "password-hermano",
             "registration_code": "family-demo",
         },
@@ -198,6 +203,7 @@ def test_only_admin_can_list_family_accounts(client):
         json={
             "username": "papa",
             "display_name": "Papá",
+            "email": "papa@example.com",
             "password": "password-papa",
             "registration_code": "family-demo",
         },
@@ -211,7 +217,9 @@ def test_account_ui_contains_user_password_bot_and_bitso_controls(client):
 
     assert "data-registration-enabled" in page.text
     assert "/static/account-settings.js" in page.text
-    assert "Crear cuenta familiar" in script.text
+    assert "Crear cuenta" in script.text
+    assert "Olvidé mi contraseña" in script.text
+    assert "Correo para recuperar contraseña" in script.text
     assert "Bot automático" in script.text
     assert "IA exploratoria" in script.text
     assert "API secret" in script.text
