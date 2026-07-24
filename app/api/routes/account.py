@@ -76,7 +76,7 @@ def _public_account(request: Request, row: UserAccount) -> dict:
 
 
 def _anonymous_learning_summary(rows: list[dict]) -> dict:
-    """Expose aggregate counts only; never source labels containing a person's name."""
+    """Expose aggregate metrics only; never personal labels or trade identifiers."""
     summary = learning_source_summary(rows)
     return {
         "manual_samples": summary.get("manual_samples", 0),
@@ -225,6 +225,7 @@ async def community_learning(request: Request):
         return {
             "enabled": False,
             "participants": 0,
+            "privacy": "aggregate_only_without_identity_or_trade_ids",
             "learning_sources": _anonymous_learning_summary([]),
         }
     with request.app.state.db_session_factory() as session:
@@ -244,6 +245,6 @@ async def community_learning(request: Request):
     return {
         "enabled": True,
         "participants": len(participant_ids),
-        "privacy": "aggregated_without_usernames_or_trade_ids",
+        "privacy": "aggregate_only_without_identity_or_trade_ids",
         "learning_sources": _anonymous_learning_summary(rows),
     }
