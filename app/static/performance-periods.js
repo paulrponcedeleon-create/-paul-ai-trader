@@ -54,7 +54,7 @@
   async function loadQuickSummary() {
     ensureCards();
     const params = new URLSearchParams({
-      timezone: "America/Chihuahua",
+      timezone: "America/Ciudad_Juarez",
       ts: String(Date.now())
     });
     const books = selectedBooks();
