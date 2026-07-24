@@ -42,6 +42,8 @@ async def runtime_start(request: Request):
     runtime = _runtime(request)
     status = runtime.status() if runtime.running else await runtime.start()
     _ensure_background_loop(request, runtime)
+    request.app.state.runtime_startup_state = "manual_running"
+    request.app.state.runtime_startup_error = None
     payload = status.to_public_dict()
     payload["last_decision"] = _with_signal_level(payload.get("last_decision"))
     return payload
@@ -52,6 +54,7 @@ async def runtime_stop(request: Request):
     runtime = _runtime(request)
     await _cancel_background_loop(request)
     status = await runtime.stop() if runtime.running else runtime.status()
+    request.app.state.runtime_startup_state = "stopped"
     payload = status.to_public_dict()
     payload["last_decision"] = _with_signal_level(payload.get("last_decision"))
     return payload
@@ -69,11 +72,23 @@ async def runtime_status(request: Request):
             action=brain.get("last_action", "hold"),
         )
         brain.update(classified.to_public_dict())
+    task = getattr(request.app.state, "runtime_background_task", None)
     payload.update(
         {
             "automatic": bool(
                 getattr(request.app.state.settings, "runtime_auto_start", True)
             ),
+            "startup_state": getattr(
+                request.app.state,
+                "runtime_startup_state",
+                "manual",
+            ),
+            "startup_error": getattr(
+                request.app.state,
+                "runtime_startup_error",
+                None,
+            ),
+            "background_task_active": bool(task is not None and not task.done()),
             "mode_label": (
                 "Simulación automática"
                 if not request.app.state.settings.live_trading
@@ -120,6 +135,36 @@ async def runtime_config(request: Request):
     return payload
 
 
+async def startup_runtime(application: FastAPI) -> None:
+    """Start the paper Runtime during application startup when explicitly enabled."""
+    settings = application.state.settings
+    application.state.runtime_startup_error = None
+
+    if not bool(getattr(settings, "runtime_auto_start", True)):
+        application.state.runtime_startup_state = "disabled"
+        return
+    if getattr(settings, "app_env", "development") == "test":
+        application.state.runtime_startup_state = "test_disabled"
+        return
+    if bool(getattr(settings, "live_trading", False)):
+        application.state.runtime_startup_state = "blocked_live_mode"
+        return
+    if str(getattr(settings, "runtime_broker", "paper")).lower() != "paper":
+        application.state.runtime_startup_state = "blocked_non_paper_broker"
+        return
+
+    try:
+        runtime = _runtime_for_application(application)
+        if not runtime.running:
+            await runtime.start()
+        _ensure_background_task(application, runtime)
+    except Exception as exc:
+        application.state.runtime_startup_state = "error"
+        application.state.runtime_startup_error = f"{type(exc).__name__}: {exc}"
+        return
+    application.state.runtime_startup_state = "automatic_running"
+
+
 async def shutdown_runtime(application: FastAPI) -> None:
     """Cancel Runtime background work and disconnect an existing Runtime engine."""
     await _cancel_background_task(application)
@@ -149,17 +194,24 @@ async def _cancel_background_task(application: FastAPI) -> None:
         await task
 
 
+def _ensure_background_task(
+    application: FastAPI,
+    runtime: ExplorationRuntimeEngine,
+) -> None:
+    task = getattr(application.state, "runtime_background_task", None)
+    if task is None or task.done():
+        application.state.runtime_background_task = asyncio.create_task(
+            _background_loop(runtime), name="paul-ai-paper-runtime"
+        )
+
+
 def _ensure_background_loop(
     request: Request, runtime: ExplorationRuntimeEngine
 ) -> None:
     settings = request.app.state.settings
     if not bool(getattr(settings, "runtime_auto_start", True)):
         return
-    task = getattr(request.app.state, "runtime_background_task", None)
-    if task is None or task.done():
-        request.app.state.runtime_background_task = asyncio.create_task(
-            _background_loop(runtime), name="paul-ai-paper-runtime"
-        )
+    _ensure_background_task(request.app, runtime)
 
 
 def _resolved_runtime_books(settings) -> tuple[str, ...]:
@@ -176,10 +228,10 @@ def _resolved_runtime_books(settings) -> tuple[str, ...]:
     return verified or VERIFIED_RUNTIME_BOOKS
 
 
-def _runtime(request: Request) -> ExplorationRuntimeEngine:
-    runtime = getattr(request.app.state, "runtime_engine", None)
+def _runtime_for_application(application: FastAPI) -> ExplorationRuntimeEngine:
+    runtime = getattr(application.state, "runtime_engine", None)
     if runtime is None:
-        settings = request.app.state.settings
+        settings = application.state.settings
         config = RuntimeConfig(
             loop_interval_seconds=float(
                 getattr(settings, "runtime_loop_interval_seconds", 60.0)
@@ -210,11 +262,14 @@ def _runtime(request: Request) -> ExplorationRuntimeEngine:
             amount_mxn=Decimal(
                 str(getattr(settings, "paper_exploration_amount_mxn", 10))
             ),
+            max_positions=int(
+                getattr(settings, "paper_exploration_max_positions", 3)
+            ),
         )
         broker = None
         if config.broker_name == "paper":
             broker = ExplorationPersistentPaperBroker(
-                session_factory=request.app.state.db_session_factory,
+                session_factory=application.state.db_session_factory,
                 settings=settings,
             )
         runtime = ExplorationRuntimeEngine(
@@ -224,5 +279,9 @@ def _runtime(request: Request) -> ExplorationRuntimeEngine:
             broker=broker,
             settings=settings,
         )
-        request.app.state.runtime_engine = runtime
+        application.state.runtime_engine = runtime
     return runtime
+
+
+def _runtime(request: Request) -> ExplorationRuntimeEngine:
+    return _runtime_for_application(request.app)
