@@ -82,8 +82,15 @@ def test_tampered_session_cookie_is_rejected(test_settings: Settings):
         signed_cookie = valid_client.cookies.get(test_settings.session_cookie_name)
 
     assert signed_cookie is not None
-    replacement = "a" if signed_cookie[-1] != "a" else "b"
-    tampered_cookie = f"{signed_cookie[:-1]}{replacement}"
+    # Change a character in the signed payload, not the final base64 character.
+    # Mutating only the last character can alter unused padding bits and decode
+    # to the same bytes, making the test nondeterministic.
+    separator = signed_cookie.rfind(".")
+    tamper_index = separator + 1 if 0 <= separator < len(signed_cookie) - 2 else len(signed_cookie) // 2
+    replacement = "a" if signed_cookie[tamper_index] != "a" else "b"
+    tampered_cookie = (
+        f"{signed_cookie[:tamper_index]}{replacement}{signed_cookie[tamper_index + 1:]}"
+    )
 
     with TestClient(application) as tampered_client:
         tampered_client.cookies.set(test_settings.session_cookie_name, tampered_cookie)
