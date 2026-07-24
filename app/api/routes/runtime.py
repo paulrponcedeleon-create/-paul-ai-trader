@@ -8,7 +8,9 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, Request
 
 from app.brokers.persistent_paper import PersistentPaperBroker
-from app.runtime import RuntimeConfig, RuntimeEngine
+from app.paper_trading.exploration import ExplorationConfig
+from app.runtime import RuntimeConfig
+from app.runtime_exploration import ExplorationRuntimeEngine
 from app.services.signal_levels import classify_signal_level
 
 router = APIRouter(tags=["runtime"])
@@ -112,7 +114,10 @@ async def runtime_components(request: Request):
 
 @router.get("/runtime/config")
 async def runtime_config(request: Request):
-    return _runtime(request).config.to_public_dict()
+    runtime = _runtime(request)
+    payload = runtime.config.to_public_dict()
+    payload["exploration"] = runtime.status().to_public_dict().get("exploration")
+    return payload
 
 
 async def shutdown_runtime(application: FastAPI) -> None:
@@ -123,7 +128,7 @@ async def shutdown_runtime(application: FastAPI) -> None:
         await runtime.stop()
 
 
-async def _background_loop(runtime: RuntimeEngine) -> None:
+async def _background_loop(runtime: ExplorationRuntimeEngine) -> None:
     while True:
         await runtime.run_once()
         await asyncio.sleep(max(runtime.config.loop_interval_seconds, 5.0))
@@ -144,7 +149,9 @@ async def _cancel_background_task(application: FastAPI) -> None:
         await task
 
 
-def _ensure_background_loop(request: Request, runtime: RuntimeEngine) -> None:
+def _ensure_background_loop(
+    request: Request, runtime: ExplorationRuntimeEngine
+) -> None:
     settings = request.app.state.settings
     if not bool(getattr(settings, "runtime_auto_start", True)):
         return
@@ -169,7 +176,7 @@ def _resolved_runtime_books(settings) -> tuple[str, ...]:
     return verified or VERIFIED_RUNTIME_BOOKS
 
 
-def _runtime(request: Request) -> RuntimeEngine:
+def _runtime(request: Request) -> ExplorationRuntimeEngine:
     runtime = getattr(request.app.state, "runtime_engine", None)
     if runtime is None:
         settings = request.app.state.settings
@@ -189,14 +196,31 @@ def _runtime(request: Request) -> RuntimeEngine:
             broker_name=getattr(settings, "runtime_broker", "paper"),
             max_history=int(getattr(settings, "runtime_history_points", 200)),
         )
+        exploration_config = ExplorationConfig(
+            enabled=bool(getattr(settings, "paper_exploration_enabled", True)),
+            hold_cycles_before_entry=int(
+                getattr(settings, "paper_exploration_hold_cycles", 20)
+            ),
+            max_holding_cycles=int(
+                getattr(settings, "paper_exploration_max_holding_cycles", 20)
+            ),
+            cooldown_cycles=int(
+                getattr(settings, "paper_exploration_cooldown_cycles", 40)
+            ),
+            amount_mxn=Decimal(
+                str(getattr(settings, "paper_exploration_amount_mxn", 10))
+            ),
+        )
         broker = None
         if config.broker_name == "paper":
             broker = PersistentPaperBroker(
                 session_factory=request.app.state.db_session_factory,
                 settings=settings,
             )
-        runtime = RuntimeEngine(
+        runtime = ExplorationRuntimeEngine(
             config=config,
+            exploration_config=exploration_config,
+            live_trading=bool(settings.live_trading),
             broker=broker,
             settings=settings,
         )
