@@ -54,32 +54,39 @@ def _start_session(request: Request, user) -> None:
 async def login(body: LoginRequest, request: Request):
     settings = request.app.state.settings
     username = (body.username or settings.owner_username).strip().lower()
+    owner_username = settings.owner_username.strip().lower()
+
+    # The owner password is managed by Render. Authenticate it before touching
+    # PostgreSQL so a sleeping or unavailable database cannot block access to
+    # the application shell. Database-backed family users continue below.
+    if username == owner_username and secrets.compare_digest(
+        body.password,
+        settings.app_password,
+    ):
+        user = SimpleNamespace(id=OWNER_USER_ID, username=owner_username)
+        _start_session(request, user)
+        return {"ok": True}
+
     user = None
     try:
         with request.app.state.db_session_factory() as session:
             repository = SqlUserAccountRepository(session)
-            repository.ensure_owner(
-                username=settings.owner_username,
-                display_name="Paul",
-                password=settings.app_password,
-                initial_capital_mxn=settings.simulated_initial_capital_mxn,
-            )
-            session.commit()
             user = repository.authenticate(username, body.password)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception:
-        # During the first rolling deploy the application may start before the
-        # new user_accounts migration is visible. Preserve only the original
-        # owner's environment-password login; no family account can use this path.
-        if username == settings.owner_username.strip().lower() and secrets.compare_digest(
-            body.password,
-            settings.app_password,
-        ):
-            user = SimpleNamespace(id=OWNER_USER_ID, username=username)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="La base de datos está tardando o no está disponible. Intenta nuevamente en unos segundos.",
+        ) from exc
 
     if user is None:
-        raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
+        detail = (
+            "Contraseña incorrecta."
+            if username == owner_username
+            else "Usuario o contraseña incorrectos."
+        )
+        raise HTTPException(status_code=401, detail=detail)
     _start_session(request, user)
     return {"ok": True}
 
