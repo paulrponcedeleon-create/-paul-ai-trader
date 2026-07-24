@@ -50,6 +50,39 @@
 .market-filter.filter-hold:not(.active) { color: #175cd3; border-color: #84caff; }
 .market-filter.filter-sell:not(.active) { color: #b42318; border-color: #fda29b; }
 
+.market-level-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin: -4px 0 14px;
+  padding: 9px 11px;
+  border: 1px solid #e4e7ec;
+  border-radius: 12px;
+  background: #fff;
+  color: #475467;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.market-level-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.market-level-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(16, 24, 40, .06);
+}
+
+.legend-blue i { background: #1570ef; }
+.legend-green i { background: #079455; }
+.legend-yellow i { background: #fdb022; }
+.legend-orange i { background: #f79009; }
+.legend-red i { background: #d92d20; }
+
 .books.market-grid-v2 {
   display: grid !important;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -124,12 +157,14 @@
 }
 
 .market-action {
+  max-width: 56%;
   border-radius: 999px;
   padding: 5px 8px;
   font-size: 9px;
   font-weight: 900;
   letter-spacing: .04em;
-  white-space: nowrap;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .market-price {
@@ -147,33 +182,53 @@
 .market-route { word-break: break-word; }
 .market-empty { grid-column: 1 / -1; padding: 24px; text-align: center; color: #667085; }
 
-.books.market-grid-v2 .market-book-v2.signal-buy,
-.books.market-grid-v2 .market-book-v2.signal-buy.active {
+.books.market-grid-v2 .market-book-v2.level-blue,
+.books.market-grid-v2 .market-book-v2.level-blue.active {
+  background: #eff8ff !important;
+  color: #175cd3 !important;
+}
+.books.market-grid-v2 .market-book-v2.level-blue .market-action {
+  background: #1570ef !important;
+  color: #fff !important;
+}
+
+.books.market-grid-v2 .market-book-v2.level-green,
+.books.market-grid-v2 .market-book-v2.level-green.active {
   background: #dcfae6 !important;
   color: #05603a !important;
 }
-.books.market-grid-v2 .market-book-v2.signal-buy .market-action {
-  background: #067647 !important;
+.books.market-grid-v2 .market-book-v2.level-green .market-action {
+  background: #079455 !important;
   color: #fff !important;
 }
 
-.books.market-grid-v2 .market-book-v2.signal-hold,
-.books.market-grid-v2 .market-book-v2.signal-hold.active {
-  background: #dbeafe !important;
-  color: #1849a9 !important;
+.books.market-grid-v2 .market-book-v2.level-yellow,
+.books.market-grid-v2 .market-book-v2.level-yellow.active {
+  background: #fffaeb !important;
+  color: #93370d !important;
 }
-.books.market-grid-v2 .market-book-v2.signal-hold .market-action {
-  background: #175cd3 !important;
+.books.market-grid-v2 .market-book-v2.level-yellow .market-action {
+  background: #fdb022 !important;
+  color: #4e1d09 !important;
+}
+
+.books.market-grid-v2 .market-book-v2.level-orange,
+.books.market-grid-v2 .market-book-v2.level-orange.active {
+  background: #fff4ed !important;
+  color: #9c2a10 !important;
+}
+.books.market-grid-v2 .market-book-v2.level-orange .market-action {
+  background: #f79009 !important;
   color: #fff !important;
 }
 
-.books.market-grid-v2 .market-book-v2.signal-sell,
-.books.market-grid-v2 .market-book-v2.signal-sell.active {
+.books.market-grid-v2 .market-book-v2.level-red,
+.books.market-grid-v2 .market-book-v2.level-red.active {
   background: #fee4e2 !important;
   color: #912018 !important;
 }
-.books.market-grid-v2 .market-book-v2.signal-sell .market-action {
-  background: #b42318 !important;
+.books.market-grid-v2 .market-book-v2.level-red .market-action {
+  background: #d92d20 !important;
   color: #fff !important;
 }
 
@@ -204,6 +259,8 @@
 
 @media (max-width: 520px) {
   .market-filter-group > span { width: 100%; }
+  .market-level-legend { display: grid; grid-template-columns: 1fr 1fr; }
   .books.market-grid-v2 { grid-template-columns: 1fr; }
   .books.market-grid-v2 .market-book-v2 { min-height: 118px; }
+  .market-action { max-width: 62%; }
 }
