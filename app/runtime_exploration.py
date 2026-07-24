@@ -53,14 +53,23 @@ class ExplorationRuntimeEngine(RuntimeEngine):
         live_trading: bool,
         **kwargs: Any,
     ) -> None:
+        settings = kwargs.get("settings")
         super().__init__(**kwargs)
         self.live_trading = bool(live_trading)
+        configured_max_positions = int(
+            getattr(
+                settings,
+                "paper_exploration_max_positions",
+                exploration_config.max_positions,
+            )
+        )
         effective_config = ExplorationConfig(
             enabled=bool(exploration_config.enabled and not self.live_trading),
             hold_cycles_before_entry=exploration_config.hold_cycles_before_entry,
             max_holding_cycles=exploration_config.max_holding_cycles,
             cooldown_cycles=exploration_config.cooldown_cycles,
             amount_mxn=exploration_config.amount_mxn,
+            max_positions=configured_max_positions,
         )
         self.exploration = PaperExplorationPolicy(effective_config)
         self.last_exploration: dict[str, Any] | None = None
@@ -77,6 +86,10 @@ class ExplorationRuntimeEngine(RuntimeEngine):
         )
         return source == "exploration" or reason.startswith("paper_exploration_")
 
+    @staticmethod
+    def _experience_type(action: str) -> str:
+        return "experience_buy" if action == "buy" else "experience_exit"
+
     def _set_execution_context(self, reason: str) -> None:
         setter = getattr(self.broker, "set_execution_context", None)
         if callable(setter):
@@ -84,12 +97,18 @@ class ExplorationRuntimeEngine(RuntimeEngine):
 
     def _exploration_payload(self) -> dict[str, Any]:
         states = self.exploration.public_state()
+        attempts = sum(int(state["attempts"]) for state in states.values())
         entries = sum(int(state["entries"]) for state in states.values())
         exits = sum(int(state["exits"]) for state in states.values())
         rejected = sum(int(state["rejected"]) for state in states.values())
+        capacity_blocks = sum(
+            int(state["capacity_blocks"]) for state in states.values()
+        )
         active = sum(1 for state in states.values() if state["active"])
         persistent_getter = getattr(self.broker, "get_exploration_metrics", None)
         persistent = persistent_getter() if callable(persistent_getter) else {}
+        persisted_entries = int(persistent.get("entries", entries))
+        persisted_exits = int(persistent.get("exits", exits))
         return {
             "enabled": self.exploration.config.enabled,
             "live_trading_blocked": self.live_trading,
@@ -97,11 +116,22 @@ class ExplorationRuntimeEngine(RuntimeEngine):
             "max_holding_cycles": self.exploration.config.max_holding_cycles,
             "cooldown_cycles": self.exploration.config.cooldown_cycles,
             "amount_mxn": float(self.exploration.config.amount_mxn),
+            "max_positions": self.exploration.config.max_positions,
             "active_positions": int(persistent.get("active_positions", active)),
-            "entries": int(persistent.get("entries", entries)),
-            "exits": int(persistent.get("exits", exits)),
+            "attempts": max(attempts, int(persistent.get("attempts", persisted_entries))),
+            "entries": persisted_entries,
+            "exits": persisted_exits,
+            "completed_trades": int(
+                persistent.get("completed_trades", persisted_exits)
+            ),
+            "wins": int(persistent.get("wins", 0)),
+            "losses": int(persistent.get("losses", 0)),
+            "flat": int(persistent.get("flat", 0)),
+            "realized_pnl_mxn": float(persistent.get("realized_pnl_mxn", 0)),
             "rejected": rejected,
-            "last_experience": persistent.get("last_experience") or self.last_exploration,
+            "capacity_blocks": capacity_blocks,
+            "last_experience": persistent.get("last_experience")
+            or self.last_exploration,
             "states": states,
             "metrics_separate_from_strategy": True,
             "persistent": bool(persistent.get("persistent", False)),
@@ -124,6 +154,9 @@ class ExplorationRuntimeEngine(RuntimeEngine):
         strategy_action = str(decision.get("action") or "hold").lower()
         positions = self.broker.get_positions()
         book_positions = [item for item in positions if item.get("book") == book]
+        active_exploration_positions = sum(
+            1 for item in positions if self._is_exploration_position(item)
+        )
         exploration_position = any(
             self._is_exploration_position(item) for item in book_positions
         )
@@ -133,6 +166,7 @@ class ExplorationRuntimeEngine(RuntimeEngine):
             has_position=bool(book_positions),
             live_trading=self.live_trading,
             exploration_position=exploration_position,
+            active_exploration_positions=active_exploration_positions,
         )
         if proposal is None or strategy_action != "hold":
             return
@@ -219,9 +253,11 @@ class ExplorationRuntimeEngine(RuntimeEngine):
             reason=proposal.reason,
             filled=filled,
         )
+        experience_type = self._experience_type(proposal.action)
         self.last_exploration = {
             "book": book,
             "action": proposal.action,
+            "experience_type": experience_type,
             "reason": proposal.reason,
             "amount_mxn": float(amount),
             "price": float(price),
@@ -231,11 +267,13 @@ class ExplorationRuntimeEngine(RuntimeEngine):
             self.last_order = {
                 **order.to_public_dict(),
                 "source": "exploration",
+                "experience_type": experience_type,
                 "reason": proposal.reason,
             }
         self.last_decision = {
             **decision,
             "exploration_action": proposal.action,
+            "exploration_experience_type": experience_type,
             "exploration_reason": proposal.reason,
             "exploration_amount_mxn": float(amount),
         }
@@ -247,6 +285,7 @@ class ExplorationRuntimeEngine(RuntimeEngine):
             {
                 "book": book,
                 "action": proposal.action,
+                "experience_type": experience_type,
                 "reason": proposal.reason,
                 "filled": filled,
                 "amount_mxn": float(amount),
