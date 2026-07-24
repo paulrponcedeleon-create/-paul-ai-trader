@@ -12,8 +12,18 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str
     display_name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=8, max_length=200)
     registration_code: str
+
+
+class PasswordForgotRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+
+
+class PasswordResetRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=300)
+    password: str = Field(min_length=8, max_length=200)
 
 
 class AccountPreferencesRequest(BaseModel):
