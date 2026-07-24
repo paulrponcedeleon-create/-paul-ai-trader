@@ -58,7 +58,7 @@ def create_app(
     engine = build_engine(current_settings)
     session_factory = build_session_factory(engine)
 
-    if current_settings.app_env == "test":
+    if getattr(current_settings, "app_env", "development") == "test":
         Base.metadata.create_all(bind=engine)
 
     @asynccontextmanager
@@ -67,7 +67,7 @@ def create_app(
         try:
             with session_factory() as session:
                 SqlUserAccountRepository(session).ensure_owner(
-                    username=current_settings.owner_username,
+                    username=getattr(current_settings, "owner_username", "paul"),
                     display_name="Paul",
                     password=current_settings.app_password,
                     initial_capital_mxn=current_settings.simulated_initial_capital_mxn,
@@ -139,7 +139,9 @@ def create_app(
             "authenticated": authenticated(request),
             "current_user": user,
             "current_username": current_username(request),
-            "registration_enabled": current_settings.registration_enabled,
+            "registration_enabled": bool(
+                getattr(current_settings, "registration_enabled", False)
+            ),
             "live_trading": current_settings.live_trading,
             "max_order": current_settings.max_order_mxn,
             "allowed_books": sorted(current_settings.allowed_books_set),
@@ -150,7 +152,6 @@ def create_app(
         return {
             "status": "ok",
             "mode": "live" if current_settings.live_trading else "simulation",
-            "multiuser": True,
         }
 
     @application.get("/", response_class=HTMLResponse)
