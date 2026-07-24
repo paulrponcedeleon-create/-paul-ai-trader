@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from app.config import Settings
 from app.db import models  # noqa: F401
 from app.db import order_models  # noqa: F401
+from app.db import user_models  # noqa: F401
 from app.db.base import Base
 from app.db.session import normalize_database_url
 
@@ -17,7 +18,6 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    # Use the same .env and environment-variable resolution as the application.
     settings = Settings()
     return normalize_database_url(settings.database_url)
 
