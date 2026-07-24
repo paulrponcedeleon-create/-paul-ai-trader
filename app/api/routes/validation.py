@@ -70,12 +70,12 @@ def _manager(request: Request) -> ValidationManager:
 
 def _load_sources_if_available(request: Request) -> None:
     manager = _manager(request)
-    observations = getattr(request.app.state, "paper_performance_observations", None)
+    observations: list[dict] = []
     summary = learning_source_summary([])
 
     try:
         with request.app.state.db_session_factory() as session:
-            rows = SqlSimulatedOrderRepository(session).list_closed()
+            rows = SqlSimulatedOrderRepository(session).list(limit=10000)
         observations = build_learning_observations(rows)
         summary = learning_source_summary(rows)
         request.app.state.paper_performance_observations = observations
@@ -95,8 +95,13 @@ def _load_sources_if_available(request: Request) -> None:
     ):
         return
 
+    # Research can provide an expected baseline, but it must never create fake
+    # paper results. Validation only runs after at least one position is closed.
+    if not observations:
+        request.app.state.validation_learning_signature = signature
+        return
+
     research = getattr(request.app.state, "research_manager", None)
     research_run = getattr(research, "current_run", None)
-    if research_run is not None or observations:
-        manager.run(research_run=research_run, paper_observations=observations)
-        request.app.state.validation_learning_signature = signature
+    manager.run(research_run=research_run, paper_observations=observations)
+    request.app.state.validation_learning_signature = signature
