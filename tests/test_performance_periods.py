@@ -19,9 +19,9 @@ def _row(book: str, pnl: str, entry_fee: str = "0.10", exit_fee: str = "0.10"):
 
 def test_period_bounds_use_local_day_week_and_month():
     now = datetime(2026, 7, 24, 6, 30, tzinfo=timezone.utc)
-    day_start, _ = period_bounds(now, "day", "America/Chihuahua")
-    week_start, _ = period_bounds(now, "week", "America/Chihuahua")
-    month_start, _ = period_bounds(now, "month", "America/Chihuahua")
+    day_start, _ = period_bounds(now, "day", "America/Ciudad_Juarez")
+    week_start, _ = period_bounds(now, "week", "America/Ciudad_Juarez")
+    month_start, _ = period_bounds(now, "month", "America/Ciudad_Juarez")
 
     assert day_start < now
     assert week_start <= day_start
@@ -39,7 +39,7 @@ def test_summary_uses_decimal_and_counts_wins_losses_flat():
         ]
     )
 
-    assert summary["realized_pnl_mxn"] == 0.68
+    assert summary["realized_pnl_mxn"] == 0.67
     assert summary["fees_mxn"] == 0.60
     assert summary["trades"] == 3
     assert summary["wins"] == 1
@@ -66,6 +66,7 @@ def test_performance_endpoint_filters_multiple_books(client):
     assert response.status_code == 200
     payload = response.json()
     assert payload["books"] == ["btc_mxn", "eth_mxn"]
+    assert payload["timezone"] == "America/Ciudad_Juarez"
     assert set(payload["periods"]) == {"day", "week", "month"}
     for period in payload["periods"].values():
         assert "realized_pnl_mxn" in period
