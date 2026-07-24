@@ -112,6 +112,7 @@ jobs:
           assert "ix_simulated_orders_book" in indexes
           assert "ix_simulated_orders_correlation_id" in indexes
           assert "ix_simulated_orders_status" in indexes
+          assert "ix_simulated_orders_source" in indexes
           assert "ix_simulated_order_events_created_at" in indexes
           assert "ix_simulated_order_events_position_id" in indexes
           assert "ix_simulated_order_events_side" in indexes
@@ -127,6 +128,7 @@ jobs:
               "exit_fee_rate",
               "exit_fee_mxn",
               "parent_position_id",
+              "source",
           }.issubset(columns)
           assert {
               "position_id",
@@ -158,5 +160,5 @@ jobs:
                   column,
                   order_event_columns[column],
               )
-          assert revision == ("20260723_0010",)
+          assert revision == ("20260724_0011",)
           PY
