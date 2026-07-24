@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
 
-from app.brokers.persistent_paper import PersistentPaperBroker
+from app.brokers.exploration_persistent_paper import ExplorationPersistentPaperBroker
 from app.paper_trading.exploration import ExplorationConfig
 from app.runtime import RuntimeConfig
 from app.runtime_exploration import ExplorationRuntimeEngine
@@ -213,7 +213,7 @@ def _runtime(request: Request) -> ExplorationRuntimeEngine:
         )
         broker = None
         if config.broker_name == "paper":
-            broker = PersistentPaperBroker(
+            broker = ExplorationPersistentPaperBroker(
                 session_factory=request.app.state.db_session_factory,
                 settings=settings,
             )
