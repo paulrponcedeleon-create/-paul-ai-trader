@@ -1,3 +1,5 @@
+"""API coverage for partial simulated position closes."""
+
 import pytest
 
 pytest.importorskip("sqlalchemy")
