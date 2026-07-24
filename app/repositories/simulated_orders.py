@@ -8,36 +8,39 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import SimulatedOrder
-from app.services.money import (
-    public_money,
-    quantize_money,
-    quantize_price,
-    quantize_rate,
-)
+from app.security.user_context import get_current_user_id
+from app.services.money import public_money, quantize_money, quantize_price, quantize_rate
 from app.services.trade_sources import infer_position_source, normalize_position_source
 
 
 class SqlSimulatedOrderRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, user_id: str | None = "current") -> None:
         self.session = session
+        self.user_id = get_current_user_id() if user_id == "current" else user_id
+
+    def _scope(self, statement):
+        if self.user_id is not None:
+            statement = statement.where(SimulatedOrder.user_id == self.user_id)
+        return statement
 
     def list(self, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+        statement = self._scope(select(SimulatedOrder))
         rows = self.session.scalars(
-            select(SimulatedOrder)
-            .order_by(SimulatedOrder.created_at.desc(), SimulatedOrder.id.desc())
+            statement.order_by(SimulatedOrder.created_at.desc(), SimulatedOrder.id.desc())
             .limit(limit)
             .offset(offset)
         ).all()
         return [row.to_dict() for row in rows]
 
     def list_open(self) -> list[dict[str, Any]]:
-        rows = self.session.scalars(
-            select(SimulatedOrder)
-            .where(
+        statement = self._scope(
+            select(SimulatedOrder).where(
                 SimulatedOrder.status == "open",
                 SimulatedOrder.reference_price.is_not(None),
             )
-            .order_by(SimulatedOrder.created_at.desc(), SimulatedOrder.id.desc())
+        )
+        rows = self.session.scalars(
+            statement.order_by(SimulatedOrder.created_at.desc(), SimulatedOrder.id.desc())
         ).all()
         return [row.to_dict() for row in rows]
 
@@ -49,10 +52,12 @@ class SqlSimulatedOrderRepository:
         books: set[str] | None = None,
         sources: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        statement = select(SimulatedOrder).where(
-            SimulatedOrder.status == "closed",
-            SimulatedOrder.closed_at.is_not(None),
-            SimulatedOrder.realized_pnl_mxn.is_not(None),
+        statement = self._scope(
+            select(SimulatedOrder).where(
+                SimulatedOrder.status == "closed",
+                SimulatedOrder.closed_at.is_not(None),
+                SimulatedOrder.realized_pnl_mxn.is_not(None),
+            )
         )
         if start_at is not None:
             statement = statement.where(SimulatedOrder.closed_at >= start_at)
@@ -61,33 +66,29 @@ class SqlSimulatedOrderRepository:
         if books:
             statement = statement.where(SimulatedOrder.book.in_(sorted(books)))
         if sources:
-            normalized_sources = {
-                normalize_position_source(source) for source in sources
-            }
-            statement = statement.where(
-                SimulatedOrder.source.in_(sorted(normalized_sources))
-            )
+            normalized_sources = {normalize_position_source(source) for source in sources}
+            statement = statement.where(SimulatedOrder.source.in_(sorted(normalized_sources)))
         rows = self.session.scalars(
             statement.order_by(SimulatedOrder.closed_at.asc(), SimulatedOrder.id.asc())
         ).all()
         return [row.to_dict() for row in rows]
 
     def capital_ledger_decimal(self, initial_capital_mxn: Any) -> dict[str, Decimal]:
-        open_invested = self.session.scalar(
+        open_statement = self._scope(
             select(func.coalesce(func.sum(SimulatedOrder.amount_mxn), Decimal("0.00"))).where(
                 SimulatedOrder.status == "open"
             )
         )
-        realized_pnl = self.session.scalar(
+        pnl_statement = self._scope(
             select(
-                func.coalesce(
-                    func.sum(SimulatedOrder.realized_pnl_mxn), Decimal("0.00")
-                )
+                func.coalesce(func.sum(SimulatedOrder.realized_pnl_mxn), Decimal("0.00"))
             ).where(
                 SimulatedOrder.status == "closed",
                 SimulatedOrder.realized_pnl_mxn.is_not(None),
             )
         )
+        open_invested = self.session.scalar(open_statement)
+        realized_pnl = self.session.scalar(pnl_statement)
         initial = quantize_money(initial_capital_mxn)
         invested = quantize_money(open_invested or Decimal("0"))
         realized = quantize_money(realized_pnl or Decimal("0"))
@@ -106,18 +107,25 @@ class SqlSimulatedOrderRepository:
 
     def get_open(self, simulation_id: str) -> dict[str, Any] | None:
         row = self.session.get(SimulatedOrder, simulation_id)
-        if row is None or row.status != "open" or row.reference_price is None:
+        if (
+            row is None
+            or row.status != "open"
+            or row.reference_price is None
+            or (self.user_id is not None and row.user_id != self.user_id)
+        ):
             return None
         return row.to_dict()
 
     def count(self) -> int:
-        total = self.session.scalar(select(func.count()).select_from(SimulatedOrder))
-        return int(total or 0)
+        statement = self._scope(select(func.count()).select_from(SimulatedOrder))
+        return int(self.session.scalar(statement) or 0)
 
     def add(self, item: dict[str, Any]) -> dict[str, Any]:
         source = infer_position_source(item)
+        resolved_user_id = str(item.get("user_id") or self.user_id or "owner")
         row = SimulatedOrder(
             id=str(item["id"]),
+            user_id=resolved_user_id,
             created_at=item["created_at"],
             closed_at=item.get("closed_at"),
             parent_position_id=item.get("parent_position_id"),
@@ -182,7 +190,9 @@ class SqlSimulatedOrderRepository:
         realized_pnl_mxn: Any,
     ) -> dict[str, Any] | None:
         row = self.session.get(SimulatedOrder, simulation_id)
-        if row is None or row.status != "open":
+        if row is None or row.status != "open" or (
+            self.user_id is not None and row.user_id != self.user_id
+        ):
             return None
         row.status = "closed"
         row.closed_at = closed_at
@@ -206,7 +216,9 @@ class SqlSimulatedOrderRepository:
         realized_pnl_mxn: Any,
     ) -> tuple[dict[str, Any], dict[str, Any]] | None:
         row = self.session.get(SimulatedOrder, simulation_id)
-        if row is None or row.status != "open":
+        if row is None or row.status != "open" or (
+            self.user_id is not None and row.user_id != self.user_id
+        ):
             return None
         amount = quantize_money(amount_mxn)
         if amount <= Decimal("0.00") or amount >= row.amount_mxn:
@@ -220,6 +232,7 @@ class SqlSimulatedOrderRepository:
 
         closed_row = SimulatedOrder(
             id=closed_lot_id,
+            user_id=row.user_id,
             created_at=row.created_at,
             closed_at=closed_at,
             parent_position_id=row.parent_position_id or row.id,
