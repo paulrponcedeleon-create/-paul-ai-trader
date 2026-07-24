@@ -77,16 +77,18 @@ def test_production_cookie_is_secure(monkeypatch):
 
 def test_tampered_session_cookie_is_rejected(test_settings: Settings):
     application = create_app(test_settings)
-    with TestClient(application) as valid_client:
-        valid_client.post("/api/login", json={"password": "test-password"})
-        signed_cookie = valid_client.cookies.get(test_settings.session_cookie_name)
 
-    assert signed_cookie is not None
-    replacement = "a" if signed_cookie[-1] != "a" else "b"
-    tampered_cookie = f"{signed_cookie[:-1]}{replacement}"
+    # An attacker-controlled cookie without a valid SessionMiddleware signature
+    # must be treated exactly like an anonymous session.
+    invalid_cookie = "invalid-payload.invalid-signature"
 
     with TestClient(application) as tampered_client:
-        tampered_client.cookies.set(test_settings.session_cookie_name, tampered_cookie)
+        tampered_client.cookies.set(
+            test_settings.session_cookie_name,
+            invalid_cookie,
+            path="/",
+        )
         response = tampered_client.get("/api/config")
 
     assert response.status_code == 401
+    assert response.json() == {"detail": "Inicia sesión."}

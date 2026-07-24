@@ -1,3 +1,29 @@
+.order-event-filters {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(130px, 0.8fr) minmax(150px, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin: 0.85rem 0 1rem;
+}
+
+.order-event-filters label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted, #64748b);
+}
+
+.order-event-filters input,
+.order-event-filters select {
+  width: 100%;
+  min-height: 42px;
+}
+
+#loadMoreOrders {
+  margin-top: 0.9rem;
+}
+
 .order-events-list {
   display: grid;
   gap: 0.75rem;
@@ -39,28 +65,24 @@
 }
 
 .order-event-main strong,
-.order-event-main small {
-  display: block;
-}
-
-.order-event-main small {
-  margin-top: 0.2rem;
-  color: var(--muted, #64748b);
-  overflow-wrap: anywhere;
-}
-
-.order-event-values {
-  text-align: right;
-}
-
+.order-event-main small,
 .order-event-values strong,
 .order-event-values small {
   display: block;
 }
 
+.order-event-main small,
 .order-event-values small {
   margin-top: 0.2rem;
   color: var(--muted, #64748b);
+}
+
+.order-event-main small {
+  overflow-wrap: anywhere;
+}
+
+.order-event-values {
+  text-align: right;
 }
 
 .order-event-pnl.positive {
@@ -89,7 +111,17 @@
   color: inherit;
 }
 
+@media (max-width: 760px) {
+  .order-event-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @media (max-width: 680px) {
+  .order-event-filters {
+    grid-template-columns: 1fr;
+  }
+
   .order-event-row {
     grid-template-columns: auto minmax(0, 1fr);
   }

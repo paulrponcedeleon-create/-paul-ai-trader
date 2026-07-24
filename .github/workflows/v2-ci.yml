@@ -126,6 +126,7 @@ jobs:
               "entry_fee_mxn",
               "exit_fee_rate",
               "exit_fee_mxn",
+              "parent_position_id",
           }.issubset(columns)
           assert {
               "position_id",
@@ -157,5 +158,5 @@ jobs:
                   column,
                   order_event_columns[column],
               )
-          assert revision == ("20260723_0009",)
+          assert revision == ("20260723_0010",)
           PY
