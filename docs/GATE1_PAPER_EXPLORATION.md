@@ -41,6 +41,8 @@ La posición abierta conserva el motivo en `simulated_orders.risk_check`, por lo
 - `PAPER_EXPLORATION_COOLDOWN_CYCLES`
 - `PAPER_EXPLORATION_AMOUNT_MXN`
 
+Los ciclos, el enfriamiento y el monto se validan al iniciar la aplicación. El monto exploratorio nunca puede superar `MAX_ORDER_MXN`.
+
 ## Seguridad
 
 La exploración queda desactivada de forma efectiva cuando `LIVE_TRADING=true` o cuando el broker no es `paper`. No agrega llamadas reales a Bitso, no evita el Risk Engine y no cambia el valor de `LIVE_TRADING`.
