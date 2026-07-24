@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     paper_exploration_max_holding_cycles: int = 20
     paper_exploration_cooldown_cycles: int = 40
     paper_exploration_amount_mxn: float = 10.0
+    paper_exploration_max_positions: int = 3
 
     burnin_default_duration: str = "1h"
     burnin_memory_growth_alert_bytes: int = 26214400
@@ -155,6 +156,13 @@ class Settings(BaseSettings):
         if self.paper_exploration_amount_mxn > self.max_order_mxn:
             raise ValueError(
                 "PAPER_EXPLORATION_AMOUNT_MXN no puede superar MAX_ORDER_MXN."
+            )
+        if (
+            self.paper_exploration_max_positions < 1
+            or self.paper_exploration_max_positions > 100
+        ):
+            raise ValueError(
+                "PAPER_EXPLORATION_MAX_POSITIONS debe estar entre 1 y 100."
             )
         if self.runtime_broker != "paper" and not self.live_trading:
             raise ValueError("Con LIVE_TRADING=false, RUNTIME_BROKER debe permanecer en paper.")
