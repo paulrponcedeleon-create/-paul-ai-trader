@@ -87,11 +87,11 @@ jobs:
               )
           }
           columns = {
-              row[1]
+              row[1]: row[2].upper()
               for row in connection.execute("PRAGMA table_info(simulated_orders)")
           }
           order_event_columns = {
-              row[1]
+              row[1]: row[2].upper()
               for row in connection.execute(
                   "PRAGMA table_info(simulated_order_events)"
               )
@@ -140,5 +140,22 @@ jobs:
               "reason",
               "correlation_id",
           }.issubset(order_event_columns)
-          assert revision == ("20260723_0008",)
+
+          for column in (
+              "amount_mxn",
+              "reference_price",
+              "close_price",
+              "entry_fee_rate",
+              "entry_fee_mxn",
+              "exit_fee_rate",
+              "exit_fee_mxn",
+              "realized_pnl_mxn",
+          ):
+              assert columns[column].startswith("NUMERIC"), (column, columns[column])
+          for column in ("amount_mxn", "price", "fee_mxn", "realized_pnl_mxn"):
+              assert order_event_columns[column].startswith("NUMERIC"), (
+                  column,
+                  order_event_columns[column],
+              )
+          assert revision == ("20260723_0009",)
           PY

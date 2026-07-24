@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.order_models import SimulatedOrderEvent
+from app.services.money import quantize_money, quantize_price
 
 
 class SqlSimulatedOrderEventRepository:
@@ -67,13 +68,19 @@ class SqlSimulatedOrderEventRepository:
             book=str(item["book"]).lower(),
             side=str(item["side"]).lower(),
             status=str(item.get("status", "filled")).lower(),
-            amount_mxn=float(item["amount_mxn"]),
-            price=float(item["price"]) if item.get("price") is not None else None,
+            amount_mxn=quantize_money(item["amount_mxn"]),
+            price=(
+                quantize_price(item["price"])
+                if item.get("price") is not None
+                else None
+            ),
             fee_mxn=(
-                float(item["fee_mxn"]) if item.get("fee_mxn") is not None else None
+                quantize_money(item["fee_mxn"])
+                if item.get("fee_mxn") is not None
+                else None
             ),
             realized_pnl_mxn=(
-                float(item["realized_pnl_mxn"])
+                quantize_money(item["realized_pnl_mxn"])
                 if item.get("realized_pnl_mxn") is not None
                 else None
             ),

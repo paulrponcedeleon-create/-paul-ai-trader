@@ -59,7 +59,7 @@ async def release_info(request: Request):
     require_auth(request)
     commit = os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT") or "local"
     branch = os.getenv("RENDER_GIT_BRANCH") or "v2-dashboard"
-    release = os.getenv("APP_RELEASE") or "Gate 1 · Órdenes simuladas"
+    release = os.getenv("APP_RELEASE") or "Gate 1 · Contabilidad Decimal"
     return {
         "release": release,
         "branch": branch,

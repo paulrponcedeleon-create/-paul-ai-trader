@@ -11,7 +11,7 @@ from app.paper_trading import PaperTradingEngine, PortfolioManager
 from app.paper_trading.models import PaperPosition, PaperTrade
 from app.repositories.order_events import SqlSimulatedOrderEventRepository
 from app.repositories.simulated_orders import SqlSimulatedOrderRepository
-from app.services.backtest_metrics import round_money, to_decimal
+from app.services.money import public_money, quantize_money, to_decimal
 
 
 class PersistentPortfolioManager(PortfolioManager):
@@ -35,7 +35,7 @@ class PersistentPaperBroker(PaperBroker):
         session_factory: Callable[[], Any],
         settings: Any,
     ) -> None:
-        initial_cash = to_decimal(
+        initial_cash = quantize_money(
             getattr(settings, "simulated_initial_capital_mxn", 1000)
         )
         portfolio = PersistentPortfolioManager(initial_cash_mxn=initial_cash)
@@ -59,20 +59,20 @@ class PersistentPaperBroker(PaperBroker):
             ),
             Decimal("0"),
         )
-        cash = to_decimal(ledger["available_cash_mxn"])
-        realized = to_decimal(ledger["realized_pnl_mxn"])
-        invested = to_decimal(ledger["open_invested_mxn"])
-        equity = round_money(cash + positions_value)
-        unrealized = round_money(positions_value - invested)
+        cash = ledger["available_cash_mxn"]
+        realized = ledger["realized_pnl_mxn"]
+        invested = ledger["open_invested_mxn"]
+        equity = quantize_money(cash + positions_value)
+        unrealized = quantize_money(positions_value - invested)
         return BrokerBalance(
             cash,
             equity,
-            round_money(positions_value),
+            quantize_money(positions_value),
             {
                 "broker": self.name,
                 "persistent": True,
-                "realized_pnl_mxn": float(realized),
-                "unrealized_pnl_mxn": float(unrealized),
+                "realized_pnl_mxn": public_money(realized),
+                "unrealized_pnl_mxn": public_money(unrealized),
                 "closed_trades": closed_count,
             },
         )
@@ -177,12 +177,12 @@ class PersistentPaperBroker(PaperBroker):
             self._persist_closed_trade(trade)
         return closed
 
-    def _sync_from_database(self) -> tuple[dict[str, float], int]:
+    def _sync_from_database(self) -> tuple[dict[str, Decimal], int]:
         with self.session_factory() as session:
             repository = SqlSimulatedOrderRepository(session)
             open_rows = repository.list_open()
             closed_rows = repository.list_closed()
-            ledger = repository.capital_ledger(float(self.initial_cash_mxn))
+            ledger = repository.capital_ledger_decimal(self.initial_cash_mxn)
 
         open_ids = {str(row["id"]) for row in open_rows}
         for position_id in list(self.engine.portfolio.positions):
@@ -196,10 +196,8 @@ class PersistentPaperBroker(PaperBroker):
             position = self._position_from_row(row)
             self.engine.portfolio.positions[position.id] = position
 
-        self.engine.portfolio.cash_mxn = to_decimal(ledger["available_cash_mxn"])
-        self.engine.portfolio.realized_pnl_mxn = to_decimal(
-            ledger["realized_pnl_mxn"]
-        )
+        self.engine.portfolio.cash_mxn = ledger["available_cash_mxn"]
+        self.engine.portfolio.realized_pnl_mxn = ledger["realized_pnl_mxn"]
         return ledger, len(closed_rows)
 
     def _position_from_row(self, row: dict[str, Any]) -> PaperPosition:
@@ -253,10 +251,10 @@ class PersistentPaperBroker(PaperBroker):
                     "status": "open",
                     "book": position.book,
                     "side": "buy",
-                    "amount_mxn": float(position.amount_mxn),
-                    "reference_price": float(position.entry_price),
-                    "entry_fee_rate": 0.0,
-                    "entry_fee_mxn": float(position.entry_fee_mxn),
+                    "amount_mxn": position.amount_mxn,
+                    "reference_price": position.entry_price,
+                    "entry_fee_rate": Decimal("0"),
+                    "entry_fee_mxn": position.entry_fee_mxn,
                     "correlation_id": correlation_id,
                     "risk_check": "runtime_paper_fill",
                 }
@@ -269,9 +267,9 @@ class PersistentPaperBroker(PaperBroker):
                     "book": position.book,
                     "side": "buy",
                     "status": "filled",
-                    "amount_mxn": float(position.amount_mxn),
-                    "price": float(position.entry_price),
-                    "fee_mxn": float(position.entry_fee_mxn),
+                    "amount_mxn": position.amount_mxn,
+                    "price": position.entry_price,
+                    "fee_mxn": position.entry_fee_mxn,
                     "source": "runtime",
                     "reason": "strategy_buy",
                     "correlation_id": correlation_id,
@@ -306,10 +304,10 @@ class PersistentPaperBroker(PaperBroker):
             repository.close(
                 trade.position_id,
                 closed_at=trade.closed_at,
-                close_price=float(trade.exit_price),
-                exit_fee_rate=0.0,
-                exit_fee_mxn=float(exit_fee),
-                realized_pnl_mxn=float(trade.pnl_mxn),
+                close_price=trade.exit_price,
+                exit_fee_rate=Decimal("0"),
+                exit_fee_mxn=exit_fee,
+                realized_pnl_mxn=trade.pnl_mxn,
             )
             event_repository.add(
                 {
@@ -319,10 +317,10 @@ class PersistentPaperBroker(PaperBroker):
                     "book": trade.book,
                     "side": "sell",
                     "status": "filled",
-                    "amount_mxn": float(closed_amount),
-                    "price": float(trade.exit_price),
-                    "fee_mxn": float(exit_fee),
-                    "realized_pnl_mxn": float(trade.pnl_mxn),
+                    "amount_mxn": closed_amount,
+                    "price": trade.exit_price,
+                    "fee_mxn": exit_fee,
+                    "realized_pnl_mxn": trade.pnl_mxn,
                     "source": source,
                     "reason": trade.reason,
                     "correlation_id": trade.id,
