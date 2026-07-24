@@ -16,7 +16,20 @@ class UserAccount(Base):
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(254), nullable=True, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_reset_token_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    password_reset_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    password_reset_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
     bot_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -48,6 +61,7 @@ class UserAccount(Base):
             "id": self.id,
             "username": self.username,
             "display_name": self.display_name,
+            "email": self.email,
             "is_admin": self.is_admin,
             "is_active": self.is_active,
             "bot_enabled": self.bot_enabled,
@@ -61,6 +75,9 @@ class UserAccount(Base):
             ),
             "bitso_connected_at": (
                 self.bitso_connected_at.isoformat() if self.bitso_connected_at else None
+            ),
+            "password_changed_at": (
+                self.password_changed_at.isoformat() if self.password_changed_at else None
             ),
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
