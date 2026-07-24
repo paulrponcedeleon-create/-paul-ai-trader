@@ -11,8 +11,34 @@
 .account-user-chip strong { font-size: 12px; }
 .account-user-chip small { font-size: 9px; }
 
+.auth-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 14px 0;
+  padding: 5px;
+  border: 1px solid #e4e7ec;
+  border-radius: 13px;
+  background: #f8fafc;
+}
+.auth-switch {
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #475467;
+  font-size: 11px;
+}
+.auth-switch.active {
+  background: #101828;
+  color: #fff;
+  box-shadow: 0 2px 7px rgba(16, 24, 40, .18);
+}
+.auth-panel { margin-top: 8px; }
+
 .account-login-grid,
 .account-register-grid,
+.account-recovery-grid,
 .account-bitso-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -20,8 +46,10 @@
 }
 .account-login-grid button,
 .account-register-grid button,
+.account-recovery-grid button,
 .account-bitso-grid button,
 .account-register-grid .full,
+.account-recovery-grid .full,
 .account-bitso-grid .full { grid-column: 1 / -1; }
 .account-login-actions { display: flex; gap: 8px; align-items: center; }
 
@@ -83,6 +111,8 @@
   .account-grid,
   .account-login-grid,
   .account-register-grid,
+  .account-recovery-grid,
   .account-bitso-grid { grid-template-columns: 1fr; }
+  .auth-switcher { grid-template-columns: 1fr; }
   .account-user-chip { align-items: flex-start; }
 }
