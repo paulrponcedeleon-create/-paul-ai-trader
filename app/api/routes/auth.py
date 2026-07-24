@@ -7,6 +7,7 @@ from app.api.dependencies import SESSION_AUTH_KEY
 from app.api.routes.capital import router as capital_router
 from app.api.routes.markets import router as markets_router
 from app.api.routes.order_events import router as order_events_router
+from app.api.routes.partial_closes import router as partial_closes_router
 from app.models import LoginRequest
 
 
@@ -28,6 +29,7 @@ router.include_router(
 )
 router.include_router(capital_router)
 router.include_router(order_events_router)
+router.include_router(partial_closes_router)
 
 
 @router.post("/login")
