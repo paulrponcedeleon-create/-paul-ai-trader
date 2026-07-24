@@ -1,3 +1,4 @@
+from collections import defaultdict
 from decimal import Decimal
 from typing import Any
 
@@ -8,6 +9,13 @@ from app.services.money import (
     public_quantity,
     quantize_rate,
     to_decimal,
+)
+from app.services.trade_sources import (
+    BOT_SOURCES,
+    MANUAL_SOURCE,
+    POSITION_SOURCES,
+    infer_position_source,
+    public_source,
 )
 
 PERCENT = Decimal("0.0001")
@@ -96,7 +104,7 @@ def calculate_position(
     }
 
 
-def summarize_positions(positions: list[dict[str, Any]]) -> dict[str, Any]:
+def _summarize_rows(positions: list[dict[str, Any]]) -> dict[str, Any]:
     invested = sum((to_decimal(item["amount_mxn"]) for item in positions), Decimal("0"))
     current_value = sum(
         (to_decimal(item["current_value_mxn"]) for item in positions), Decimal("0")
@@ -115,4 +123,39 @@ def summarize_positions(positions: list[dict[str, Any]]) -> dict[str, Any]:
         "unrealized_pnl_mxn": public_money(pnl),
         "estimated_fees_mxn": public_money(fees),
         "return_pct": public_decimal(return_pct, quantum=PERCENT),
+    }
+
+
+def summarize_positions(positions: list[dict[str, Any]]) -> dict[str, Any]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in positions:
+        grouped[infer_position_source(item)].append(item)
+
+    by_source = [
+        {
+            **public_source(source),
+            **_summarize_rows(grouped.get(source, [])),
+        }
+        for source in POSITION_SOURCES
+    ]
+    source_map = {item["source"]: item for item in by_source}
+    manual = _summarize_rows(grouped.get(MANUAL_SOURCE, []))
+    bot_rows = [
+        row
+        for source in BOT_SOURCES
+        for row in grouped.get(source, [])
+    ]
+    bot = _summarize_rows(bot_rows)
+
+    return {
+        **_summarize_rows(positions),
+        "by_source": by_source,
+        "comparison": {
+            "manual": {"label": "Tus operaciones manuales", **manual},
+            "bot": {"label": "Bot + IA", **bot},
+        },
+        "source_counts": {
+            source: int(source_map[source]["open_positions"])
+            for source in POSITION_SOURCES
+        },
     }
