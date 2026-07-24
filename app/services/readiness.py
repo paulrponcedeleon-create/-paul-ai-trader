@@ -23,6 +23,11 @@ class ReadinessResult:
     payload: dict[str, Any]
 
 
+def _bool_setting(settings: Any, name: str, default: bool = False) -> bool:
+    """Read optional settings without requiring them on legacy test doubles."""
+    return bool(getattr(settings, name, default))
+
+
 def check_readiness(settings: Settings, engine: Engine) -> ReadinessResult:
     checks: dict[str, Any] = {}
     errors: list[str] = []
@@ -55,11 +60,11 @@ def _check_config(
     }
     checks["multiuser"] = {
         "ok": True,
-        "registration_enabled": bool(
-            getattr(settings, "registration_enabled", False)
+        "registration_enabled": _bool_setting(
+            settings, "registration_enabled"
         ),
-        "community_learning_enabled": bool(
-            getattr(settings, "community_learning_enabled", False)
+        "community_learning_enabled": _bool_setting(
+            settings, "community_learning_enabled"
         ),
     }
     if not valid:
