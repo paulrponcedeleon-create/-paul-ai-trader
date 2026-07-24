@@ -56,3 +56,7 @@ La revisión `20260724_0012` crea `user_accounts` y agrega `user_id` a:
 - `simulated_order_events`.
 
 Los registros históricos quedan asignados a la cuenta principal `owner`.
+
+## Compatibilidad validada
+
+Los contratos públicos existentes de `/health` y `/api/release` se conservan. Las rutas de Runtime mantienen compatibilidad con pruebas internas de una sola instancia, mientras que las sesiones reales utilizan motores aislados por usuario. La salida comunitaria contiene únicamente agregados anónimos.
