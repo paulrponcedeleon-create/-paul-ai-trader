@@ -25,8 +25,15 @@ def test_automatic_exit_from_exploration_keeps_exploration_source(client):
     assert opened.status == "filled"
     assert len(closed) == 1
     metrics = broker.get_exploration_metrics()
+    assert metrics["attempts"] == 1
     assert metrics["entries"] == 1
     assert metrics["exits"] == 1
+    assert metrics["completed_trades"] == 1
+    assert metrics["wins"] == 0
+    assert metrics["losses"] == 1
+    assert metrics["flat"] == 0
+    assert metrics["realized_pnl_mxn"] == -0.4
+    assert metrics["last_experience"]["experience_type"] == "experience_exit"
 
     with client.app.state.db_session_factory() as session:
         events = SqlSimulatedOrderEventRepository(session).list(
