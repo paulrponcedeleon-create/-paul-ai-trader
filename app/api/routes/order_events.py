@@ -43,7 +43,6 @@ async def order_events(
         )
     shown = offset + len(items)
     return {
-        "user_id": user_id,
         "items": items,
         "total": total,
         "limit": limit,
@@ -56,12 +55,11 @@ async def order_events(
 
 @router.get("/release")
 async def release_info(request: Request):
-    user_id = require_auth(request)
+    require_auth(request)
     commit = os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT") or "local"
     branch = os.getenv("RENDER_GIT_BRANCH") or "v2-dashboard"
     release = os.getenv("APP_RELEASE") or "Gate 2 · Multiusuario Paper"
     return {
-        "user_id": user_id,
         "release": release,
         "branch": branch,
         "commit": commit[:8] if commit != "local" else commit,
