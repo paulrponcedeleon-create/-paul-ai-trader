@@ -26,6 +26,16 @@
 
   const money = value => Number(value || 0).toLocaleString('es-MX', {style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2});
   const metric = (label, value, help = '') => `<div class="module-metric"><span>${label}${help ? `<small class="muted">${help}</small>` : ''}</span><strong>${value}</strong></div>`;
+  const startupLabel = state => ({
+    automatic_running: 'Iniciado automáticamente',
+    manual_running: 'Iniciado manualmente',
+    disabled: 'Desactivado por configuración',
+    test_disabled: 'Desactivado en pruebas',
+    blocked_live_mode: 'Bloqueado en modo real',
+    blocked_non_paper_broker: 'Bloqueado: broker no paper',
+    stopped: 'Detenido',
+    error: 'Error de arranque'
+  }[state] || 'Esperando arranque');
 
   function friendlyRender(name, data) {
     if (name === 'runtime') {
@@ -38,6 +48,8 @@
         : 'Todavía no hay una experiencia completa';
       return [
         metric('Motor automático', data.running ? 'Trabajando' : 'Iniciando', 'Analiza el mercado y toma decisiones con dinero simulado.'),
+        metric('Arranque después de despliegue', startupLabel(data.startup_state), data.startup_error || 'Se recupera solo cuando Render inicia o vuelve a desplegar.'),
+        metric('Proceso en segundo plano', data.background_task_active ? 'Activo' : 'No activo'),
         metric('Ciclos completados', text(data.cycles), 'Cada ciclo revisa los activos configurados.'),
         metric('Fuente de precios', data.provider_label || 'Bitso, solo lectura'),
         metric('Tipo de dinero', data.broker_label || 'Dinero simulado'),
@@ -128,7 +140,7 @@
     loadModule('analytics');
     const databaseOk = readiness?.checks?.database?.ok;
     const missingTables = readiness?.checks?.required_tables?.missing || [];
-    setText('#statusRuntime', runtime?.running ? 'Analizando automáticamente' : 'Iniciando simulación');
+    setText('#statusRuntime', runtime?.running ? 'Analizando automáticamente' : (runtime?.startup_state === 'error' ? 'Error de arranque' : 'Iniciando simulación'));
     setText('#statusMarket', health ? 'Precios conectados' : 'Sin respuesta');
     setText('#statusDatabase', databaseOk === true ? 'Conectada' : databaseOk === false ? (missingTables.length ? 'Faltan tablas' : 'No disponible') : 'Sin confirmar');
     setDot('#statusRuntimeDot', Boolean(runtime?.running)); setDot('#statusMarketDot', Boolean(health)); setDot('#statusDatabaseDot', databaseOk === true);
