@@ -5,7 +5,19 @@
   if (!grid) return;
 
   const actionLabels = {buy: 'COMPRAR', hold: 'MANTENER', sell: 'VENDER SI TIENES'};
-  const CACHE_KEY = 'paul-market-card-cache-v5';
+  const levelFallback = {
+    buy: {level: 'favorable', color: 'green', label: 'Favorable'},
+    hold: {level: 'observe', color: 'yellow', label: 'Mantener y observar'},
+    sell: {level: 'critical', color: 'red', label: 'Riesgo alto / salida'}
+  };
+  const levelOrder = [
+    ['blue', 'Oportunidad excepcional'],
+    ['green', 'Favorable'],
+    ['yellow', 'Mantener y observar'],
+    ['orange', 'Desfavorable'],
+    ['red', 'Riesgo alto / salida']
+  ];
+  const CACHE_KEY = 'paul-market-card-cache-v6';
   const REQUEST_TIMEOUT_MS = 15000;
   const CRYPTO_REFRESH_MS = 15000;
   const STOCK_REFRESH_MS = 60000;
@@ -20,7 +32,7 @@
     const book = card.dataset.book;
     const symbol = card.querySelector('.market-symbol')?.textContent?.trim() || book.toUpperCase();
     const name = card.querySelector('.market-card-head small')?.textContent?.trim() || symbol;
-    return [book, {book, symbol, name, asset_type: stockBooks.has(book) ? 'stock' : 'market', signal: {action: 'hold'}}];
+    return [book, {book, symbol, name, asset_type: stockBooks.has(book) ? 'stock' : 'market', signal: {action: 'hold', ...levelFallback.hold}}];
   }));
 
   function money(value) {
@@ -51,6 +63,28 @@
     return item.route.map(value => String(value).toUpperCase()).join(' → ');
   }
 
+  function normalizeSignal(signal={}) {
+    const action = signal.action || 'hold';
+    const fallback = levelFallback[action] || levelFallback.hold;
+    return {
+      ...fallback,
+      ...signal,
+      action,
+      score: Number(signal.score ?? signal.confidence ?? 0),
+      confidence: Number(signal.confidence ?? 0)
+    };
+  }
+
+  function ensureLegend() {
+    if (!filters || document.querySelector('#marketSignalLegend')) return;
+    const legend = document.createElement('div');
+    legend.id = 'marketSignalLegend';
+    legend.className = 'market-level-legend';
+    legend.setAttribute('aria-label', 'Escala de señales');
+    legend.innerHTML = levelOrder.map(([color, label]) => `<span class="legend-${color}"><i></i>${label}</span>`).join('');
+    filters.insertAdjacentElement('afterend', legend);
+  }
+
   function saveCache() {
     try {
       const values = [...catalog.values()].filter(item => item.last !== undefined);
@@ -72,21 +106,28 @@
     const item = catalog.get(book);
     const card = grid.querySelector(`[data-book="${book}"]`);
     if (!item || !card) return;
-    const action = item.signal?.action || 'hold';
-    card.classList.remove('signal-buy', 'signal-hold', 'signal-sell', 'market-load-error', 'stale-data');
-    card.classList.add(`signal-${action}`);
+    const signal = normalizeSignal(item.signal);
+    const action = signal.action;
+    card.classList.remove(
+      'signal-buy', 'signal-hold', 'signal-sell',
+      'level-blue', 'level-green', 'level-yellow', 'level-orange', 'level-red',
+      'market-load-error', 'stale-data'
+    );
+    card.classList.add(`signal-${action}`, `level-${signal.color}`);
     if (item.error && item.last === undefined) card.classList.add('market-load-error');
     if (item.error && item.last !== undefined) card.classList.add('stale-data');
     const actionElement = card.querySelector('.market-action');
     const priceElement = card.querySelector('.market-price');
     const smalls = card.querySelectorAll(':scope > small');
-    if (actionElement) actionElement.textContent = item.error && item.last === undefined ? 'REINTENTANDO' : (actionLabels[action] || 'MANTENER');
+    if (actionElement) actionElement.textContent = item.error && item.last === undefined ? 'REINTENTANDO' : String(signal.label || fallback.label).toUpperCase();
     if (priceElement) priceElement.textContent = item.last !== undefined ? money(item.last) : (item.loading ? 'Actualizando…' : 'Esperando precio');
-    if (smalls[0]) smalls[0].textContent = item.last !== undefined ? feeLabel(item) : 'Se reintentará automáticamente';
-    if (smalls[1]) smalls[1].textContent = routeLabel(item);
+    if (smalls[0]) smalls[0].textContent = `${actionLabels[action] || 'MANTENER'} · Score ${signal.score.toFixed(0)} · Confianza ${signal.confidence.toFixed(0)}%`;
+    if (smalls[1]) smalls[1].textContent = `${feeLabel(item)} · ${routeLabel(item)}`;
     if (smalls[2]) smalls[2].textContent = elapsed(item.updatedAt);
+    card.title = signal.level_explanation || signal.reason || signal.label || '';
     card.dataset.assetType = item.asset_type === 'stock' ? 'stocks' : 'markets';
     card.dataset.signal = action;
+    card.dataset.level = signal.level;
     applyFilters();
   }
 
@@ -125,11 +166,11 @@
       const data = await response.json().catch(() => ({detail: 'Respuesta inválida'}));
       if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
       const ticker = data.ticker || {};
-      catalog.set(book, {...current, ...ticker, signal: data.signal || {action: 'hold'}, available: true, error: null, loading: false, cached: false, updatedAt: Date.now()});
+      catalog.set(book, {...current, ...ticker, signal: normalizeSignal(data.signal), available: true, error: null, loading: false, cached: false, updatedAt: Date.now()});
       saveCache();
     } catch (error) {
       const message = error.name === 'AbortError' ? 'Tiempo de respuesta excedido' : error.message;
-      catalog.set(book, {...catalog.get(book), error: message, loading: false});
+      catalog.set(book, {...catalog.get(book), error: message, loading: false, signal: {action: 'hold', score: 0, confidence: 0, level: 'critical', color: 'red', label: 'Riesgo alto / salida'}});
     } finally {
       clearTimeout(timer);
       card.classList.remove('market-loading');
@@ -168,6 +209,7 @@
     loadBook(card.dataset.book);
   });
 
+  ensureLegend();
   restoreCache();
   cards.forEach(card => updateCard(card.dataset.book));
   applyFilters();
