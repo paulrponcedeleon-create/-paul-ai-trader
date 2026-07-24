@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     paper_stop_loss_pct: float = 3.0
     paper_take_profit_pct: float = 6.0
     paper_trailing_stop_pct: float = 2.0
+    paper_exploration_enabled: bool = True
+    paper_exploration_hold_cycles: int = 20
+    paper_exploration_max_holding_cycles: int = 20
+    paper_exploration_cooldown_cycles: int = 40
+    paper_exploration_amount_mxn: float = 10.0
 
     burnin_default_duration: str = "1h"
     burnin_memory_growth_alert_bytes: int = 26214400
@@ -82,6 +87,14 @@ class Settings(BaseSettings):
         if self.session_cookie_secure is not None:
             return self.session_cookie_secure
         return self.is_production
+
+    @property
+    def paper_exploration_active(self) -> bool:
+        return (
+            self.paper_exploration_enabled
+            and not self.live_trading
+            and self.runtime_broker == "paper"
+        )
 
     @staticmethod
     def _parse_books(value: str) -> set[str]:
@@ -124,6 +137,25 @@ class Settings(BaseSettings):
         }.items():
             if value <= 0 or value > 50:
                 raise ValueError(f"{name} debe estar entre 0 y 50.")
+        for name, value in {
+            "PAPER_EXPLORATION_HOLD_CYCLES": self.paper_exploration_hold_cycles,
+            "PAPER_EXPLORATION_MAX_HOLDING_CYCLES": self.paper_exploration_max_holding_cycles,
+        }.items():
+            if value < 1 or value > 10000:
+                raise ValueError(f"{name} debe estar entre 1 y 10000.")
+        if (
+            self.paper_exploration_cooldown_cycles < 0
+            or self.paper_exploration_cooldown_cycles > 10000
+        ):
+            raise ValueError(
+                "PAPER_EXPLORATION_COOLDOWN_CYCLES debe estar entre 0 y 10000."
+            )
+        if self.paper_exploration_amount_mxn <= 0:
+            raise ValueError("PAPER_EXPLORATION_AMOUNT_MXN debe ser mayor que cero.")
+        if self.paper_exploration_amount_mxn > self.max_order_mxn:
+            raise ValueError(
+                "PAPER_EXPLORATION_AMOUNT_MXN no puede superar MAX_ORDER_MXN."
+            )
         if self.runtime_broker != "paper" and not self.live_trading:
             raise ValueError("Con LIVE_TRADING=false, RUNTIME_BROKER debe permanecer en paper.")
 

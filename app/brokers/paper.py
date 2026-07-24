@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -32,6 +33,8 @@ class PaperBroker(BrokerInterface):
         )
         self.connected = False
         self._last_prices: dict[str, Decimal] = {}
+        self._execution_source = "runtime"
+        self._execution_reason: str | None = None
         self.stop_loss_pct = to_decimal(getattr(settings, "paper_stop_loss_pct", 3.0))
         self.take_profit_pct = to_decimal(
             getattr(settings, "paper_take_profit_pct", 6.0)
@@ -39,6 +42,18 @@ class PaperBroker(BrokerInterface):
         self.trailing_stop_pct = to_decimal(
             getattr(settings, "paper_trailing_stop_pct", 2.0)
         )
+
+    def set_execution_context(self, *, source: str, reason: str) -> None:
+        """Tag the next paper order without changing the broker interface contract."""
+        self._execution_source = str(source or "runtime").lower()
+        self._execution_reason = str(reason or "runtime_order")
+
+    def _consume_execution_context(self, default_reason: str) -> tuple[str, str]:
+        source = self._execution_source or "runtime"
+        reason = self._execution_reason or default_reason
+        self._execution_source = "runtime"
+        self._execution_reason = None
+        return source, reason
 
     def connect(self) -> BrokerHealth:
         self.connected = True
@@ -101,6 +116,7 @@ class PaperBroker(BrokerInterface):
         self, *, book: str, amount_mxn: Decimal, price: Decimal | None = None
     ) -> BrokerOrder:
         self._require_connected()
+        source, reason = self._consume_execution_context("strategy_buy")
         execution_price = price or self._last_prices.get(book) or Decimal("1")
         self._last_prices[book] = execution_price
         before = len(self.engine.portfolio.orders)
@@ -115,7 +131,11 @@ class PaperBroker(BrokerInterface):
             price=execution_price,
             amount_mxn=to_decimal(amount_mxn),
             fee_rate=Decimal("0"),
-            signal_data={"broker": self.name},
+            signal_data={
+                "broker": self.name,
+                "source": source,
+                "reason": reason,
+            },
             stop_loss=stop_loss,
             take_profit=take_profit,
             trailing_stop_pct=self.trailing_stop_pct,
@@ -125,6 +145,9 @@ class PaperBroker(BrokerInterface):
             if len(self.engine.portfolio.orders) > before
             else None
         )
+        if order is not None:
+            order = replace(order, reason=reason)
+            self.engine.portfolio.orders[-1] = order
         status = "filled" if position is not None else "rejected"
         return BrokerOrder(
             order.id if order else "paper_rejected",
@@ -135,13 +158,14 @@ class PaperBroker(BrokerInterface):
             to_decimal(amount_mxn),
             execution_price,
             order.created_at if order else None,
-            order.reason if order else None,
+            reason if position is not None else (order.reason if order else reason),
         )
 
     def place_market_sell(
         self, *, book: str, amount_mxn: Decimal, price: Decimal | None = None
     ) -> BrokerOrder:
         self._require_connected()
+        _, reason = self._consume_execution_context("strategy_sell")
         execution_price = price or self._last_prices.get(book) or Decimal("1")
         for position in list(self.engine.portfolio.positions.values()):
             if position.book == book:
@@ -149,10 +173,11 @@ class PaperBroker(BrokerInterface):
                     position.id,
                     price=execution_price,
                     fee_rate=Decimal("0"),
-                    reason="strategy_sell",
+                    reason=reason,
                     amount_mxn=amount_mxn,
                 )
-                order = self.engine.portfolio.orders[-1]
+                order = replace(self.engine.portfolio.orders[-1], reason=reason)
+                self.engine.portfolio.orders[-1] = order
                 return BrokerOrder(
                     order.id,
                     book,
@@ -162,7 +187,7 @@ class PaperBroker(BrokerInterface):
                     to_decimal(amount_mxn),
                     execution_price,
                     order.created_at,
-                    order.reason,
+                    reason,
                 )
         return BrokerOrder(
             "paper_no_position",
