@@ -81,6 +81,28 @@ class PersistentPaperBroker(PaperBroker):
         self._sync_from_database()
         return super().get_positions()
 
+    def get_exploration_metrics(self) -> dict[str, Any]:
+        """Return persisted exploration counters without mixing strategy metrics."""
+        with self.session_factory() as session:
+            event_repository = SqlSimulatedOrderEventRepository(session)
+            order_repository = SqlSimulatedOrderRepository(session)
+            entries = event_repository.count(source="exploration", side="buy")
+            exits = event_repository.count(source="exploration", side="sell")
+            latest = event_repository.list(limit=1, source="exploration")
+            active = sum(
+                1
+                for row in order_repository.list_open()
+                if str(row.get("risk_check") or "").startswith("paper_exploration_")
+            )
+        return {
+            "entries": entries,
+            "exits": exits,
+            "events": entries + exits,
+            "active_positions": active,
+            "last_experience": latest[0] if latest else None,
+            "persistent": True,
+        }
+
     def place_market_buy(
         self, *, book: str, amount_mxn: Decimal, price: Decimal | None = None
     ) -> BrokerOrder:
@@ -115,6 +137,7 @@ class PersistentPaperBroker(PaperBroker):
         self, *, book: str, amount_mxn: Decimal, price: Decimal | None = None
     ) -> BrokerOrder:
         self._require_connected()
+        source, reason = self._consume_execution_context("strategy_sell")
         self._sync_from_database()
         execution_price = price or self._last_prices.get(book) or Decimal("1")
         self._last_prices[book] = execution_price
@@ -143,7 +166,7 @@ class PersistentPaperBroker(PaperBroker):
             position.id,
             price=execution_price,
             fee_rate=Decimal("0"),
-            reason="strategy_sell",
+            reason=reason,
         )
         if trade is None:
             return BrokerOrder(
@@ -156,7 +179,7 @@ class PersistentPaperBroker(PaperBroker):
                 execution_price,
                 reason="No fue posible cerrar la posición simulada.",
             )
-        self._persist_closed_trade(trade)
+        self._persist_closed_trade(trade, source=source)
         order = self.engine.portfolio.orders[-1]
         return BrokerOrder(
             order.id,
@@ -167,14 +190,14 @@ class PersistentPaperBroker(PaperBroker):
             closed_amount,
             execution_price,
             order.created_at,
-            order.reason,
+            reason,
         )
 
     def update_market(self, book: str, price: Decimal) -> list[PaperTrade]:
         self._sync_from_database()
         closed = super().update_market(book, price)
         for trade in closed:
-            self._persist_closed_trade(trade)
+            self._persist_closed_trade(trade, source="automatic_exit")
         return closed
 
     def _sync_from_database(self) -> tuple[dict[str, Decimal], int]:
@@ -219,6 +242,12 @@ class PersistentPaperBroker(PaperBroker):
         trailing_stop_price = entry_price * (
             Decimal("1") - self.trailing_stop_pct / Decimal("100")
         )
+        risk_check = str(row.get("risk_check") or "runtime_paper_fill")
+        source = (
+            "exploration"
+            if risk_check.startswith("paper_exploration_")
+            else "runtime"
+        )
         return PaperPosition(
             id=str(row["id"]),
             book=str(row["book"]),
@@ -233,14 +262,18 @@ class PersistentPaperBroker(PaperBroker):
             trailing_stop_price=trailing_stop_price,
             signal_data={
                 "broker": self.name,
-                "source": "postgresql",
-                "risk_check": row.get("risk_check"),
+                "source": source,
+                "reason": risk_check,
+                "risk_check": risk_check,
             },
         )
 
     def _persist_open_position(
         self, position: PaperPosition, *, correlation_id: str
     ) -> None:
+        signal_data = position.signal_data or {}
+        source = str(signal_data.get("source") or "runtime").lower()
+        reason = str(signal_data.get("reason") or "strategy_buy")
         with self.session_factory() as session:
             repository = SqlSimulatedOrderRepository(session)
             event_repository = SqlSimulatedOrderEventRepository(session)
@@ -256,7 +289,7 @@ class PersistentPaperBroker(PaperBroker):
                     "entry_fee_rate": Decimal("0"),
                     "entry_fee_mxn": position.entry_fee_mxn,
                     "correlation_id": correlation_id,
-                    "risk_check": "runtime_paper_fill",
+                    "risk_check": reason,
                 }
             )
             event_repository.add(
@@ -270,14 +303,16 @@ class PersistentPaperBroker(PaperBroker):
                     "amount_mxn": position.amount_mxn,
                     "price": position.entry_price,
                     "fee_mxn": position.entry_fee_mxn,
-                    "source": "runtime",
-                    "reason": "strategy_buy",
+                    "source": source,
+                    "reason": reason,
                     "correlation_id": correlation_id,
                 }
             )
             session.commit()
 
-    def _persist_closed_trade(self, trade: PaperTrade) -> None:
+    def _persist_closed_trade(
+        self, trade: PaperTrade, *, source: str | None = None
+    ) -> None:
         closed_position = next(
             (
                 position
@@ -297,7 +332,15 @@ class PersistentPaperBroker(PaperBroker):
             if closed_position is not None
             else trade.quantity * trade.entry_price
         )
-        source = "runtime" if trade.reason == "strategy_sell" else "automatic_exit"
+        resolved_source = source
+        if resolved_source is None:
+            resolved_source = (
+                "exploration"
+                if str(trade.reason).startswith("paper_exploration_")
+                else "runtime"
+                if trade.reason == "strategy_sell"
+                else "automatic_exit"
+            )
         with self.session_factory() as session:
             repository = SqlSimulatedOrderRepository(session)
             event_repository = SqlSimulatedOrderEventRepository(session)
@@ -321,7 +364,7 @@ class PersistentPaperBroker(PaperBroker):
                     "price": trade.exit_price,
                     "fee_mxn": exit_fee,
                     "realized_pnl_mxn": trade.pnl_mxn,
-                    "source": source,
+                    "source": resolved_source,
                     "reason": trade.reason,
                     "correlation_id": trade.id,
                 }
