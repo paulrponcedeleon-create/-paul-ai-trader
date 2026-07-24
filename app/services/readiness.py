@@ -55,8 +55,12 @@ def _check_config(
     }
     checks["multiuser"] = {
         "ok": True,
-        "registration_enabled": settings.registration_enabled,
-        "community_learning_enabled": settings.community_learning_enabled,
+        "registration_enabled": bool(
+            getattr(settings, "registration_enabled", False)
+        ),
+        "community_learning_enabled": bool(
+            getattr(settings, "community_learning_enabled", False)
+        ),
     }
     if not valid:
         errors.append("Configuración inválida.")
