@@ -13,7 +13,6 @@ from app.services.money import (
     quantize_money,
     quantize_price,
     quantize_rate,
-    to_decimal,
 )
 
 
@@ -59,7 +58,6 @@ class SqlSimulatedOrderRepository:
             statement = statement.where(SimulatedOrder.closed_at < end_at)
         if books:
             statement = statement.where(SimulatedOrder.book.in_(sorted(books)))
-
         rows = self.session.scalars(
             statement.order_by(SimulatedOrder.closed_at.asc(), SimulatedOrder.id.asc())
         ).all()
@@ -67,9 +65,9 @@ class SqlSimulatedOrderRepository:
 
     def capital_ledger_decimal(self, initial_capital_mxn: Any) -> dict[str, Decimal]:
         open_invested = self.session.scalar(
-            select(
-                func.coalesce(func.sum(SimulatedOrder.amount_mxn), Decimal("0.00"))
-            ).where(SimulatedOrder.status == "open")
+            select(func.coalesce(func.sum(SimulatedOrder.amount_mxn), Decimal("0.00"))).where(
+                SimulatedOrder.status == "open"
+            )
         )
         realized_pnl = self.session.scalar(
             select(
@@ -85,13 +83,12 @@ class SqlSimulatedOrderRepository:
         invested = quantize_money(open_invested or Decimal("0"))
         realized = quantize_money(realized_pnl or Decimal("0"))
         available = quantize_money(initial + realized - invested)
-        equity_before_unrealized = quantize_money(initial + realized)
         return {
             "initial_capital_mxn": initial,
             "open_invested_mxn": invested,
             "realized_pnl_mxn": realized,
             "available_cash_mxn": max(Decimal("0.00"), available),
-            "account_equity_before_unrealized_mxn": equity_before_unrealized,
+            "account_equity_before_unrealized_mxn": quantize_money(initial + realized),
         }
 
     def capital_ledger(self, initial_capital_mxn: Any) -> dict[str, float]:
@@ -113,6 +110,7 @@ class SqlSimulatedOrderRepository:
             id=str(item["id"]),
             created_at=item["created_at"],
             closed_at=item.get("closed_at"),
+            parent_position_id=item.get("parent_position_id"),
             status=str(item.get("status", "simulated")),
             book=str(item["book"]).lower(),
             side=str(item["side"]),
@@ -175,7 +173,6 @@ class SqlSimulatedOrderRepository:
         row = self.session.get(SimulatedOrder, simulation_id)
         if row is None or row.status != "open":
             return None
-
         row.status = "closed"
         row.closed_at = closed_at
         row.close_price = quantize_price(close_price)
@@ -184,3 +181,56 @@ class SqlSimulatedOrderRepository:
         row.realized_pnl_mxn = quantize_money(realized_pnl_mxn)
         self.session.flush()
         return row.to_dict()
+
+    def close_partial(
+        self,
+        simulation_id: str,
+        *,
+        closed_lot_id: str,
+        amount_mxn: Any,
+        closed_at: datetime,
+        close_price: Any,
+        exit_fee_rate: Any,
+        exit_fee_mxn: Any,
+        realized_pnl_mxn: Any,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        row = self.session.get(SimulatedOrder, simulation_id)
+        if row is None or row.status != "open":
+            return None
+        amount = quantize_money(amount_mxn)
+        if amount <= Decimal("0.00") or amount >= row.amount_mxn:
+            raise ValueError("El cierre parcial debe ser menor que el monto abierto.")
+
+        original_amount = row.amount_mxn
+        ratio = amount / original_amount
+        original_entry_fee = row.entry_fee_mxn or Decimal("0.00")
+        sold_entry_fee = quantize_money(original_entry_fee * ratio)
+        remaining_entry_fee = quantize_money(original_entry_fee - sold_entry_fee)
+
+        closed_row = SimulatedOrder(
+            id=closed_lot_id,
+            created_at=row.created_at,
+            closed_at=closed_at,
+            parent_position_id=row.parent_position_id or row.id,
+            status="closed",
+            book=row.book,
+            side=row.side,
+            amount_mxn=amount,
+            reference_price=row.reference_price,
+            close_price=quantize_price(close_price),
+            entry_fee_rate=row.entry_fee_rate,
+            entry_fee_mxn=sold_entry_fee,
+            exit_fee_rate=quantize_rate(exit_fee_rate),
+            exit_fee_mxn=quantize_money(exit_fee_mxn),
+            realized_pnl_mxn=quantize_money(realized_pnl_mxn),
+            strategy_version=row.strategy_version,
+            signal_id=row.signal_id,
+            risk_decision_id=row.risk_decision_id,
+            correlation_id=row.correlation_id,
+            risk_check=row.risk_check,
+        )
+        row.amount_mxn = quantize_money(original_amount - amount)
+        row.entry_fee_mxn = remaining_entry_fee
+        self.session.add(closed_row)
+        self.session.flush()
+        return closed_row.to_dict(), row.to_dict()

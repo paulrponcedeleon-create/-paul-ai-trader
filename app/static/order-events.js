@@ -3,6 +3,7 @@
   const REFRESH_MS = 5000;
   let loading = false;
   let timer = null;
+  let selectedPartialPosition = null;
 
   const money = value => Number(value || 0).toLocaleString("es-MX", {
     style: "currency",
@@ -27,6 +28,7 @@
 
   const reasonLabel = reason => ({
     manual_close: "Cierre manual",
+    manual_partial_close: "Venta parcial manual",
     strategy_buy: "Señal de compra",
     strategy_sell: "Señal de venta",
     stop_loss: "Stop-loss",
@@ -44,13 +46,16 @@
     return "neutral";
   };
 
-  async function requestJson(url) {
+  async function requestJson(url, options = {}) {
     const response = await fetch(url, {
       cache: "no-store",
       headers: {
+        "Content-Type": "application/json",
         "Cache-Control": "no-cache",
-        "Pragma": "no-cache"
-      }
+        "Pragma": "no-cache",
+        ...(options.headers || {})
+      },
+      ...options
     });
     const data = await response.json().catch(() => ({detail: "Respuesta inválida"}));
     if (!response.ok) throw new Error(data.detail || "Error");
@@ -107,6 +112,77 @@
     }
   }
 
+  function ensurePartialCloseControl() {
+    const dialog = document.querySelector("#closePositionDialog .dialog-card");
+    if (!dialog || document.querySelector("#partialCloseAmount")) return;
+    const actions = dialog.querySelector(".dialog-actions");
+    const block = document.createElement("div");
+    block.className = "partial-close-control";
+    block.innerHTML = `
+      <label for="partialCloseAmount"><strong>Venta parcial opcional</strong></label>
+      <input id="partialCloseAmount" type="number" min="0.01" step="0.01" placeholder="Déjalo vacío para cerrar todo">
+      <small id="partialCloseHelp" class="muted">Escribe un monto menor al invertido para vender solo una parte.</small>`;
+    dialog.insertBefore(block, actions);
+  }
+
+  async function preparePartialClose(positionId) {
+    ensurePartialCloseControl();
+    selectedPartialPosition = null;
+    const input = document.querySelector("#partialCloseAmount");
+    const help = document.querySelector("#partialCloseHelp");
+    if (input) input.value = "";
+    try {
+      const data = await requestJson(`/api/positions?ts=${Date.now()}`);
+      selectedPartialPosition = (data.items || []).find(item => item.id === positionId) || null;
+      if (selectedPartialPosition && input) {
+        input.max = String(Math.max(0.01, Number(selectedPartialPosition.amount_mxn) - 0.01));
+        if (help) help.textContent = `Invertido actualmente: ${money(selectedPartialPosition.amount_mxn)}. Vacío = cerrar todo.`;
+      }
+    } catch (error) {
+      if (help) help.textContent = `No se pudo preparar la venta parcial: ${error.message}`;
+    }
+  }
+
+  document.addEventListener("click", event => {
+    const closeButton = event.target.closest("[data-close-id]");
+    if (closeButton) preparePartialClose(closeButton.dataset.closeId);
+  }, true);
+
+  document.querySelector("#confirmClosePosition")?.addEventListener("click", async event => {
+    const input = document.querySelector("#partialCloseAmount");
+    const requested = Number(input?.value || 0);
+    if (!requested) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const button = event.currentTarget;
+    if (!selectedPartialPosition) {
+      document.querySelector("#orderMessage").textContent = "No se encontró la posición abierta.";
+      return;
+    }
+    if (requested >= Number(selectedPartialPosition.amount_mxn)) {
+      document.querySelector("#orderMessage").textContent = "Para vender todo deja el campo vacío y usa Cerrar posición.";
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Vendiendo parte...";
+    try {
+      const result = await requestJson(
+        `/api/simulations/${selectedPartialPosition.id}/partial-close`,
+        {method: "POST", body: JSON.stringify({amount_mxn: requested})}
+      );
+      document.querySelector("#closePositionDialog")?.close();
+      document.querySelector("#orderMessage").textContent = `Venta parcial registrada por ${money(result.closed_lot.amount_mxn)}. P&L realizado: ${money(result.realized_pnl_mxn)}.`;
+      window.setTimeout(() => window.location.reload(), 500);
+    } catch (error) {
+      document.querySelector("#orderMessage").textContent = error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Cerrar posición";
+    }
+  }, true);
+
   async function loadRelease() {
     const marker = document.querySelector("#releaseMarker");
     if (!marker) return;
@@ -130,6 +206,7 @@
 
   const appContent = document.querySelector("#appContent");
   if (appContent && !appContent.classList.contains("hidden")) {
+    ensurePartialCloseControl();
     loadRelease();
     refreshLoop();
   }
