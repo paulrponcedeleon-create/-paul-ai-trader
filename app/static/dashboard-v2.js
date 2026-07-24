@@ -42,7 +42,7 @@
         metric('Fuente de precios', data.provider_label || 'Bitso, solo lectura'),
         metric('Tipo de dinero', data.broker_label || 'Dinero simulado'),
         metric('Última decisión', data.last_decision?.action ? String(data.last_decision.action).toUpperCase() : 'Esperando suficientes datos'),
-        metric('Experiencia autónoma', exploration.enabled ? 'Activa solo en simulación' : 'Desactivada', 'Nunca opera con dinero real y sigue las reglas de riesgo.'),
+        metric('Experiencia exploratoria autónoma', exploration.enabled ? 'Activa solo en simulación' : 'Desactivada', 'Nunca opera con dinero real y sigue las reglas de riesgo.'),
         metric('HOLD consecutivos', text(maxHolds), `Entrada exploratoria después de ${text(exploration.hold_cycles_before_entry ?? 20)} ciclos.`),
         metric('Experiencias activas', `${text(exploration.active_positions ?? 0)} / ${text(exploration.max_positions ?? 0)}`),
         metric('Intentos exploratorios', text(exploration.attempts ?? 0)),
