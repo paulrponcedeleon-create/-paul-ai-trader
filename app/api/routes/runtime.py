@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 from decimal import Decimal
+from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
 
 from app.brokers.persistent_paper import PersistentPaperBroker
 from app.runtime import RuntimeConfig, RuntimeEngine
+from app.services.signal_levels import classify_signal_level
 
 router = APIRouter(tags=["runtime"])
 
@@ -20,12 +22,27 @@ VERIFIED_RUNTIME_BOOKS = (
 )
 
 
+def _with_signal_level(decision: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not decision:
+        return decision
+    result = dict(decision)
+    level = classify_signal_level(
+        score=result.get("score", result.get("confidence", 0)),
+        confidence=result.get("confidence", result.get("confidence_pct", 0)),
+        action=str(result.get("action", "hold")),
+    )
+    result.update(level.to_public_dict())
+    return result
+
+
 @router.post("/runtime/start")
 async def runtime_start(request: Request):
     runtime = _runtime(request)
     status = runtime.status() if runtime.running else await runtime.start()
     _ensure_background_loop(request, runtime)
-    return status.to_public_dict()
+    payload = status.to_public_dict()
+    payload["last_decision"] = _with_signal_level(payload.get("last_decision"))
+    return payload
 
 
 @router.post("/runtime/stop")
@@ -33,13 +50,23 @@ async def runtime_stop(request: Request):
     runtime = _runtime(request)
     await _cancel_background_loop(request)
     status = await runtime.stop() if runtime.running else runtime.status()
-    return status.to_public_dict()
+    payload = status.to_public_dict()
+    payload["last_decision"] = _with_signal_level(payload.get("last_decision"))
+    return payload
 
 
 @router.get("/runtime/status")
 async def runtime_status(request: Request):
     runtime = _runtime(request)
     payload = runtime.status().to_public_dict()
+    payload["last_decision"] = _with_signal_level(payload.get("last_decision"))
+    for brain in payload.get("asset_brains", {}).values():
+        classified = classify_signal_level(
+            score=brain.get("last_score", 0),
+            confidence=brain.get("last_confidence", 0),
+            action=brain.get("last_action", "hold"),
+        )
+        brain.update(classified.to_public_dict())
     payload.update(
         {
             "automatic": bool(
@@ -66,6 +93,13 @@ async def runtime_status(request: Request):
             "history_label": (
                 f"{payload.get('history_points', 0)} datos cargados para análisis"
             ),
+            "signal_scale": [
+                {"color": "blue", "label": "Oportunidad excepcional"},
+                {"color": "green", "label": "Favorable"},
+                {"color": "yellow", "label": "Mantener y observar"},
+                {"color": "orange", "label": "Desfavorable"},
+                {"color": "red", "label": "Riesgo alto / salida"},
+            ],
         }
     )
     return payload
