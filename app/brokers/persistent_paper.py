@@ -197,7 +197,25 @@ class PersistentPaperBroker(PaperBroker):
         self._sync_from_database()
         closed = super().update_market(book, price)
         for trade in closed:
-            self._persist_closed_trade(trade, source="automatic_exit")
+            closed_position = next(
+                (
+                    position
+                    for position in reversed(self.engine.portfolio.closed_positions)
+                    if position.id == trade.position_id
+                    and position.closed_at == trade.closed_at
+                ),
+                None,
+            )
+            signal_data = closed_position.signal_data if closed_position else {}
+            source = (
+                "exploration"
+                if str(signal_data.get("source") or "").lower() == "exploration"
+                or str(signal_data.get("reason") or "").startswith(
+                    "paper_exploration_"
+                )
+                else "automatic_exit"
+            )
+            self._persist_closed_trade(trade, source=source)
         return closed
 
     def _sync_from_database(self) -> tuple[dict[str, Decimal], int]:
@@ -332,12 +350,18 @@ class PersistentPaperBroker(PaperBroker):
             if closed_position is not None
             else trade.quantity * trade.entry_price
         )
-        resolved_source = source
+        closed_signal = closed_position.signal_data if closed_position else {}
+        exploration_origin = (
+            str(closed_signal.get("source") or "").lower() == "exploration"
+            or str(closed_signal.get("reason") or "").startswith(
+                "paper_exploration_"
+            )
+            or str(trade.reason).startswith("paper_exploration_")
+        )
+        resolved_source = "exploration" if exploration_origin else source
         if resolved_source is None:
             resolved_source = (
-                "exploration"
-                if str(trade.reason).startswith("paper_exploration_")
-                else "runtime"
+                "runtime"
                 if trade.reason == "strategy_sell"
                 else "automatic_exit"
             )
