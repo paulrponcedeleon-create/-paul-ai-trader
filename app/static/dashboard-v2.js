@@ -106,13 +106,17 @@
       return;
     }
     if (name === 'runtime') {
+      const exploration = data.exploration || {};
       node.innerHTML = [
         metric('Motor automático', data.running ? 'Trabajando' : 'Pausado o iniciando'),
         metric('Proceso en segundo plano', data.background_task_active ? 'Activo' : 'No activo'),
         metric('Ciclos completados', text(data.cycles || 0)),
         metric('Observaciones', text(data.observations || 0)),
         metric('Posiciones abiertas', text(data.open_positions || 0)),
-        metric('Operaciones cerradas', text(data.closed_trades || 0))
+        metric('Operaciones cerradas', text(data.closed_trades || 0)),
+        metric('Experiencia exploratoria', exploration.enabled ? 'Activa en simulación' : 'Desactivada'),
+        metric('Experiencias activas', `${text(exploration.active_positions || 0)} / ${text(exploration.max_positions || 0)}`),
+        metric('Experiencias cerradas', text(exploration.completed_trades || exploration.exits || 0))
       ].join('');
       return;
     }
@@ -120,7 +124,7 @@
       const learning = data.learning_sources || {};
       node.innerHTML = [
         metric('Abiertas en seguimiento', text(learning.active_tracking_samples || 0)),
-        metric('Resultados aprendidos', text(learning.completed_result_samples || 0)),
+        metric('Operaciones cerradas aprendidas', text(learning.completed_result_samples || 0)),
         metric('Estado', text(data.status || 'recolectando'))
       ].join('');
       return;
@@ -140,9 +144,8 @@
   }
 
   async function loadModule(name, force = false) {
-    const item = endpoints[name];
-    if (!item) return null;
-    const [url, target] = item;
+    if (!endpoints[name]) return null;
+    const [url, target] = endpoints[name];
     const node = document.querySelector(target);
     if (node && force) node.innerHTML = '<p>Consultando…</p>';
     try {
