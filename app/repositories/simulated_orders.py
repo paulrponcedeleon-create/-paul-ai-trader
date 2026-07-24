@@ -14,6 +14,7 @@ from app.services.money import (
     quantize_price,
     quantize_rate,
 )
+from app.services.trade_sources import infer_position_source, normalize_position_source
 
 
 class SqlSimulatedOrderRepository:
@@ -46,6 +47,7 @@ class SqlSimulatedOrderRepository:
         start_at: datetime | None = None,
         end_at: datetime | None = None,
         books: set[str] | None = None,
+        sources: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         statement = select(SimulatedOrder).where(
             SimulatedOrder.status == "closed",
@@ -58,6 +60,13 @@ class SqlSimulatedOrderRepository:
             statement = statement.where(SimulatedOrder.closed_at < end_at)
         if books:
             statement = statement.where(SimulatedOrder.book.in_(sorted(books)))
+        if sources:
+            normalized_sources = {
+                normalize_position_source(source) for source in sources
+            }
+            statement = statement.where(
+                SimulatedOrder.source.in_(sorted(normalized_sources))
+            )
         rows = self.session.scalars(
             statement.order_by(SimulatedOrder.closed_at.asc(), SimulatedOrder.id.asc())
         ).all()
@@ -106,12 +115,14 @@ class SqlSimulatedOrderRepository:
         return int(total or 0)
 
     def add(self, item: dict[str, Any]) -> dict[str, Any]:
+        source = infer_position_source(item)
         row = SimulatedOrder(
             id=str(item["id"]),
             created_at=item["created_at"],
             closed_at=item.get("closed_at"),
             parent_position_id=item.get("parent_position_id"),
             status=str(item.get("status", "simulated")),
+            source=source,
             book=str(item["book"]).lower(),
             side=str(item["side"]),
             amount_mxn=quantize_money(item["amount_mxn"]),
@@ -213,6 +224,7 @@ class SqlSimulatedOrderRepository:
             closed_at=closed_at,
             parent_position_id=row.parent_position_id or row.id,
             status="closed",
+            source=row.source,
             book=row.book,
             side=row.side,
             amount_mxn=amount,
