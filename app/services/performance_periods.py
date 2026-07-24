@@ -7,6 +7,14 @@ from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
 from app.services.money import public_money, quantize_money, to_decimal
+from app.services.trade_sources import (
+    BOT_SOURCES,
+    LEARNING_SOURCES,
+    MANUAL_SOURCE,
+    POSITION_SOURCES,
+    infer_position_source,
+    public_source,
+)
 
 
 def period_bounds(
@@ -38,7 +46,7 @@ def period_bounds(
     return start_local.astimezone(timezone.utc), local_now.astimezone(timezone.utc)
 
 
-def summarize_closed_orders(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
+def _summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     total_pnl = Decimal("0.00")
     total_fees = Decimal("0.00")
     wins = 0
@@ -104,4 +112,55 @@ def summarize_closed_orders(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "flat": flat,
         "win_rate_pct": float(win_rate.quantize(Decimal("0.01"))),
         "by_book": books,
+    }
+
+
+def summarize_closed_orders(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    all_rows = list(rows)
+    rows_by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in all_rows:
+        rows_by_source[infer_position_source(row)].append(row)
+
+    by_source = [
+        {
+            **public_source(source),
+            **_summarize_rows(rows_by_source.get(source, [])),
+        }
+        for source in POSITION_SOURCES
+    ]
+    manual_rows = rows_by_source.get(MANUAL_SOURCE, [])
+    bot_rows = [
+        row
+        for source in BOT_SOURCES
+        for row in rows_by_source.get(source, [])
+    ]
+    learning_rows = [
+        row
+        for source in LEARNING_SOURCES
+        for row in rows_by_source.get(source, [])
+    ]
+
+    return {
+        **_summarize_rows(all_rows),
+        "by_source": by_source,
+        "comparison": {
+            "manual": {
+                "group": "manual",
+                "label": "Tus operaciones manuales",
+                **_summarize_rows(manual_rows),
+            },
+            "bot": {
+                "group": "bot",
+                "label": "Bot + IA",
+                **_summarize_rows(bot_rows),
+            },
+        },
+        "learning": {
+            "included_sources": sorted(LEARNING_SOURCES),
+            "samples": len(learning_rows),
+            "manual_samples": len(manual_rows),
+            "bot_samples": len(bot_rows),
+            "source_is_preserved": True,
+            "message": "El aprendizaje incluye operaciones manuales, del bot y exploratorias sin mezclar su origen.",
+        },
     }

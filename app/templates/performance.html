@@ -6,6 +6,7 @@
   <title>Rendimiento · {{ app_name }}</title>
   <link rel="stylesheet" href="/static/app.css?v=20260720-6">
   <link rel="stylesheet" href="/static/markets.css?v=20260720-4">
+  <link rel="stylesheet" href="/static/source-attribution.css?v=20260724-1">
 </head>
 <body>
   {% set performance_books = ['btc_mxn', 'eth_mxn', 'sol_mxn', 'xrp_mxn', 'usdt_mxn', 'algn_mxn', 'tsla_mxn', 'aapl_mxn'] %}
@@ -48,6 +49,7 @@
           <div>
             <p class="eyebrow">FILTROS</p>
             <h2>Periodo y activos</h2>
+            <p class="muted">La comparación Manual vs Bot vs IA conserva el origen de quien abrió cada posición.</p>
           </div>
           <small id="performanceUpdated" class="muted">Esperando datos…</small>
         </div>
@@ -94,86 +96,34 @@
       </section>
 
       <section class="summary-grid performance-summary">
-        <article class="card metric">
-          <span>Ganancia bruta</span><strong id="grossPnl">$0.00</strong><small>Antes de comisiones</small>
-        </article>
-        <article class="card metric">
-          <span>Comisiones</span><strong id="performanceFees">$0.00</strong><small>Entrada + salida</small>
-        </article>
-        <article class="card metric">
-          <span>Ganancia neta</span><strong id="netPnl">$0.00</strong><small id="netReturn">0.00%</small>
-        </article>
-        <article class="card metric">
-          <span>Operaciones cerradas</span><strong id="closedOperations">0</strong><small id="winsLosses">0 ganadas · 0 perdidas</small>
-        </article>
-        <article class="card metric">
-          <span>Porcentaje de aciertos</span><strong id="winRate">0.00%</strong><small>Solo resultados definidos</small>
-        </article>
-        <article class="card metric">
-          <span>Mejor / peor operación</span><strong id="bestTrade">$0.00</strong><small id="worstTrade">$0.00</small>
-        </article>
+        <article class="card metric"><span>Ganancia bruta</span><strong id="grossPnl">$0.00</strong><small>Antes de comisiones</small></article>
+        <article class="card metric"><span>Comisiones</span><strong id="performanceFees">$0.00</strong><small>Entrada + salida</small></article>
+        <article class="card metric"><span>Ganancia neta</span><strong id="netPnl">$0.00</strong><small id="netReturn">0.00%</small></article>
+        <article class="card metric"><span>Operaciones cerradas</span><strong id="closedOperations">0</strong><small id="winsLosses">0 ganadas · 0 perdidas</small></article>
+        <article class="card metric"><span>Porcentaje de aciertos</span><strong id="winRate">0.00%</strong><small>Solo resultados definidos</small></article>
+        <article class="card metric"><span>Mejor / peor operación</span><strong id="bestTrade">$0.00</strong><small id="worstTrade">$0.00</small></article>
       </section>
 
       <section class="analytics-grid">
-        <article class="card chart-card">
-          <div class="section-title">
-            <div><p class="eyebrow">RESULTADO DIARIO</p><h2>Ganancia o pérdida neta por día</h2></div>
-          </div>
-          <div id="dailyChart" class="bar-chart empty-chart">Sin operaciones cerradas en el periodo.</div>
-        </article>
-
-        <article class="card chart-card">
-          <div class="section-title">
-            <div><p class="eyebrow">ACUMULADO</p><h2>Ganancia neta acumulada</h2></div>
-          </div>
-          <div id="cumulativeChart" class="line-chart empty-chart">Sin operaciones cerradas en el periodo.</div>
-        </article>
+        <article class="card chart-card"><div class="section-title"><div><p class="eyebrow">RESULTADO DIARIO</p><h2>Ganancia o pérdida neta por día</h2></div></div><div id="dailyChart" class="bar-chart empty-chart">Sin operaciones cerradas en el periodo.</div></article>
+        <article class="card chart-card"><div class="section-title"><div><p class="eyebrow">ACUMULADO</p><h2>Ganancia neta acumulada</h2></div></div><div id="cumulativeChart" class="line-chart empty-chart">Sin operaciones cerradas en el periodo.</div></article>
       </section>
 
       <section class="card">
-        <div class="section-title">
-          <div><p class="eyebrow">POR ACTIVO</p><h2>Comparación de resultados</h2></div>
-        </div>
-        <div class="table-wrap">
-          <table class="performance-table">
-            <thead>
-              <tr>
-                <th>Activo</th><th>Ops.</th><th>Ganadas</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>Rendimiento</th>
-              </tr>
-            </thead>
-            <tbody id="bookPerformance">
-              <tr><td colspan="7">Sin resultados.</td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="section-title"><div><p class="eyebrow">POR ACTIVO</p><h2>Comparación de resultados</h2></div></div>
+        <div class="table-wrap"><table class="performance-table"><thead><tr><th>Activo</th><th>Ops.</th><th>Ganadas</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>Rendimiento</th></tr></thead><tbody id="bookPerformance"><tr><td colspan="7">Sin resultados.</td></tr></tbody></table></div>
       </section>
 
       <section class="card">
-        <div class="section-title">
-          <div><p class="eyebrow">DETALLE</p><h2>Operaciones cerradas</h2></div>
-          <small id="performancePeriodLabel" class="muted"></small>
-        </div>
-        <div class="table-wrap">
-          <table class="performance-table">
-            <thead>
-              <tr>
-                <th>Fecha</th><th>Activo</th><th>Acción</th><th>Invertido</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>%</th>
-              </tr>
-            </thead>
-            <tbody id="performanceOperations">
-              <tr><td colspan="8">Sin operaciones cerradas.</td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="section-title"><div><p class="eyebrow">DETALLE</p><h2>Operaciones cerradas</h2></div><small id="performancePeriodLabel" class="muted"></small></div>
+        <div class="table-wrap"><table class="performance-table"><thead><tr><th>Fecha</th><th>Activo</th><th>Acción</th><th>Invertido</th><th>Bruta</th><th>Comisiones</th><th>Neta</th><th>%</th></tr></thead><tbody id="performanceOperations"><tr><td colspan="8">Sin operaciones cerradas.</td></tr></tbody></table></div>
       </section>
 
-      <footer>
-        <p>Los resultados corresponden a simulaciones cerradas y consideran las comisiones estimadas registradas en cada posición.</p>
-      </footer>
+      <footer><p>Las posiciones abiertas solo están en seguimiento. Una operación entra como resultado aprendido después de cerrar, conservando si fue Manual, Bot o IA.</p></footer>
     </div>
   </main>
   <script src="/static/performance.js?v=20260722-1"></script>
-  <script src="/static/performance-periods.js?v=20260724-1"></script>
+  <script src="/static/performance-periods.js?v=20260724-2"></script>
   <script src="/static/market-catalog.js?v=20260720-4"></script>
 </body>
 </html>

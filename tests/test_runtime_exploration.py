@@ -157,4 +157,4 @@ def test_dashboard_exposes_exploration_status_labels(client):
     assert response.status_code == 200
     assert "Experiencia exploratoria" in response.text
     assert "HOLD consecutivos" in response.text
-    assert "Experiencias completadas" in response.text
+    assert "Experiencias cerradas" in response.text
