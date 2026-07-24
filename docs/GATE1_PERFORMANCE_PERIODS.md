@@ -18,17 +18,17 @@ Los cálculos usan posiciones cerradas de `simulated_orders`:
 - Comisiones: `entry_fee_mxn + exit_fee_mxn` de cada lote cerrado.
 - Operaciones: cada lote cerrado cuenta una vez, incluyendo cierres parciales.
 - Activos: filtro por uno o varios `book`.
-- Zona horaria predeterminada: `America/Chihuahua`.
+- Zona horaria predeterminada: `America/Ciudad_Juarez`, igual que la página de Rendimiento existente.
 
 ## API
 
-`GET /api/performance/summary?books=btc_mxn,eth_mxn&timezone=America/Chihuahua`
+`GET /api/performance/summary?books=btc_mxn,eth_mxn&timezone=America/Ciudad_Juarez`
 
 La respuesta contiene simultáneamente `day`, `week` y `month`, con límites ISO-8601 y desglose por activo.
 
 ## Precisión
 
-Dinero y comisiones se acumulan con `Decimal`, redondeo monetario centralizado y porcentaje calculado después de sumar resultados.
+Dinero y comisiones se acumulan con `Decimal`, usando la política monetaria centralizada. Cada operación cerrada ya se encuentra redondeada a centavos antes de formar el total.
 
 ## Seguridad
 
