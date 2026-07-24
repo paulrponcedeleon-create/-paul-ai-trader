@@ -46,7 +46,7 @@
         metric('HOLD consecutivos', text(maxHolds), `Entrada exploratoria después de ${text(exploration.hold_cycles_before_entry ?? 20)} ciclos.`),
         metric('Experiencias activas', `${text(exploration.active_positions ?? 0)} / ${text(exploration.max_positions ?? 0)}`),
         metric('Intentos exploratorios', text(exploration.attempts ?? 0)),
-        metric('Operaciones completas', text(exploration.completed_trades ?? exploration.exits ?? 0), 'Cada operación completa incluye BUY y SELL.'),
+        metric('Experiencias completadas · Operaciones completas', text(exploration.completed_trades ?? exploration.exits ?? 0), 'Cada operación completa incluye BUY y SELL.'),
         metric('Resultados', `${text(exploration.wins ?? 0)} ganadas · ${text(exploration.losses ?? 0)} perdidas · ${text(exploration.flat ?? 0)} neutras`),
         metric('P&L exploratorio', money(exploration.realized_pnl_mxn ?? 0), 'Separado del rendimiento normal de la estrategia.'),
         metric('Última experiencia', lastExperienceText),
