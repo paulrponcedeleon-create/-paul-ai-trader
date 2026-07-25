@@ -1,6 +1,7 @@
-def test_mobile_lite_requires_auth(client):
+def test_mobile_lite_redirects_to_login(client):
     response = client.get('/api/mobile', follow_redirects=False)
-    assert response.status_code in {401, 403}
+    assert response.status_code == 303
+    assert response.headers['location'] == '/'
 
 
 def test_mobile_lite_uses_real_links_and_no_background_intervals(client):
@@ -12,7 +13,8 @@ def test_mobile_lite_uses_real_links_and_no_background_intervals(client):
     assert 'href="/api/mobile?tab=markets"' in html
     assert 'href="/api/mobile?tab=paper"' in html
     assert 'setInterval' not in html
-    assert 'setTimeout(()=>c.abort(),6000)' in html
+    assert 'setTimeout(()=>c.abort(),4000)' in html
+    assert 'loadWithRetry()' in html
 
 
 def test_mobile_lite_renders_requested_tab(client):
