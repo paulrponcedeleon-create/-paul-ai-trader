@@ -1,4 +1,4 @@
-def test_dashboard_renders_verified_assets_filters_and_auto_refresh(client):
+def test_dashboard_renders_verified_assets_filters_and_controlled_refresh(client):
     client.post("/api/login", json={"password": "test-password"})
 
     response = client.get("/")
@@ -13,7 +13,7 @@ def test_dashboard_renders_verified_assets_filters_and_auto_refresh(client):
     assert ">Mantener<" in html
     assert ">Vender si tienes<" in html
     assert 'id="refreshBtn"' not in html
-    assert "Actualización automática" in html
+    assert "Actualización bajo demanda" in html
 
     market_html = html.split('id="marketGridV2"', 1)[1].split('id="marketResult"', 1)[0]
     expected = [
