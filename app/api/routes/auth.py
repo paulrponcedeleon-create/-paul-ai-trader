@@ -67,7 +67,7 @@ async def login(body: LoginRequest, request: Request):
     ):
         user = SimpleNamespace(id=OWNER_USER_ID, username=owner_username)
         _start_session(request, user)
-        return {"ok": True, "redirect": "/api/mobile"}
+        return {"ok": True}
 
     user = None
     try:
@@ -90,7 +90,7 @@ async def login(body: LoginRequest, request: Request):
         )
         raise HTTPException(status_code=401, detail=detail)
     _start_session(request, user)
-    return {"ok": True, "redirect": "/api/mobile"}
+    return {"ok": True}
 
 
 @router.post("/register", status_code=201)
@@ -128,7 +128,6 @@ async def register(body: RegisterRequest, request: Request):
     return {
         "ok": True,
         "user": public,
-        "redirect": "/api/mobile",
         "message": "Cuenta creada con $5,000 MXN simulados y bot habilitado.",
     }
 
