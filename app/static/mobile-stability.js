@@ -80,7 +80,8 @@
         const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         const externalSignal = init.signal;
         const abortFromExternal = () => controller.abort();
-        externalSignal?.addEventListener?.('abort', abortFromExternal, {once: true});
+        if (externalSignal?.aborted) controller.abort();
+        else externalSignal?.addEventListener?.('abort', abortFromExternal, {once: true});
         try {
           const response = await originalFetch(input, {...init, signal: controller.signal});
           if (info.method === 'GET' && info.key && response.ok) {
@@ -100,7 +101,10 @@
 
     if (info.method === 'GET' && info.key) {
       inflight.set(info.key, requestPromise);
-      requestPromise.finally(() => inflight.delete(info.key));
+      requestPromise.then(
+        () => inflight.delete(info.key),
+        () => inflight.delete(info.key),
+      );
     }
     return requestPromise;
   };
