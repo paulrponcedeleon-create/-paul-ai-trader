@@ -107,6 +107,8 @@
     }
     if (name === 'runtime') {
       const exploration = data.exploration || {};
+      const states = Object.values(exploration.states || {});
+      const maxHolds = states.length ? Math.max(...states.map(item => Number(item.consecutive_holds || 0))) : 0;
       node.innerHTML = [
         metric('Motor automático', data.running ? 'Trabajando' : 'Pausado o iniciando'),
         metric('Proceso en segundo plano', data.background_task_active ? 'Activo' : 'No activo'),
@@ -114,9 +116,12 @@
         metric('Observaciones', text(data.observations || 0)),
         metric('Posiciones abiertas', text(data.open_positions || 0)),
         metric('Operaciones cerradas', text(data.closed_trades || 0)),
-        metric('Experiencia exploratoria', exploration.enabled ? 'Activa en simulación' : 'Desactivada'),
+        metric('P&L flotante', money(data.unrealized_pnl_mxn || 0)),
+        metric('Experiencia exploratoria', exploration.enabled ? 'IA exploratoria activa' : 'IA exploratoria desactivada'),
+        metric('HOLD consecutivos', text(maxHolds)),
         metric('Experiencias activas', `${text(exploration.active_positions || 0)} / ${text(exploration.max_positions || 0)}`),
-        metric('Experiencias cerradas', text(exploration.completed_trades || exploration.exits || 0))
+        metric('Experiencias cerradas', text(exploration.completed_trades || exploration.exits || 0), `${exploration.wins || 0} ganadas · ${exploration.losses || 0} perdidas`),
+        metric('P&L exploratorio', money(exploration.realized_pnl_mxn || 0))
       ].join('');
       return;
     }
@@ -132,7 +137,7 @@
     if (name === 'analytics') {
       const rows = data.by_source || data.learning_sources?.by_source || [];
       node.innerHTML = rows.length ? rows.map(row => [
-        metric(row.source_label || row.source || 'Origen', `${row.open_positions || 0} abiertas · ${row.closed_positions || 0} cerradas`),
+        metric(row.source_label || row.source || 'Origen', `${row.open_positions || 0} abiertas · ${row.closed_positions || 0} cerradas`, `P&L flotante ${money(row.unrealized_pnl_mxn || 0)}`),
         metric('P&L realizado', money(row.realized_pnl_mxn || 0), `${row.wins || 0} ganadas · ${row.losses || 0} perdidas`)
       ].join('')).join('') : '<p class="module-message">Todavía no hay operaciones cerradas.</p>';
       return;
