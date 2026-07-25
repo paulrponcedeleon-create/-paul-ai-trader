@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>{{ app_name }} · Lite</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#101828;background:#f4f7fb}*{box-sizing:border-box}body{margin:0}.shell{max-width:760px;margin:auto;padding:18px 14px 64px}header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.eyebrow{font-size:12px;letter-spacing:.14em;font-weight:900;color:#667085;margin:0 0 6px}h1{font-size:30px;margin:0}.muted{color:#667085}.mode{display:inline-block;padding:8px 12px;border-radius:999px;background:#fff4cc;color:#7a5d00;font-weight:900}.tabs{display:flex;gap:8px;overflow:auto;margin:18px 0;padding-bottom:4px}.tabs a{white-space:nowrap;text-decoration:none;border:1px solid #d0d5dd;background:#fff;color:#344054;padding:10px 13px;border-radius:999px;font-weight:800}.tabs a.active{background:#101828;color:#fff}.card{background:#fff;border:1px solid #e4e7ec;border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 6px 24px rgba(16,24,40,.05)}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.metric span{display:block;color:#667085;font-size:12px}.metric strong{display:block;font-size:22px;margin-top:7px}.actions{display:flex;gap:8px;flex-wrap:wrap}button,input,select{font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd}button{background:#101828;color:#fff;font-weight:800}.secondary{background:#f2f4f7;color:#344054}.status{white-space:pre-wrap;word-break:break-word;background:#f8fafc;border-radius:12px;padding:12px;min-height:72px}.error{color:#b42318}.row{padding:10px 0;border-bottom:1px solid #eaecf0}.row:last-child{border-bottom:0}form{display:grid;gap:10px}@media(max-width:520px){.grid{grid-template-columns:1fr 1fr}h1{font-size:27px}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header><div><p class="eyebrow">PAUL AI TRADER</p><h1>Modo ligero</h1><p class="muted">Navegación estable para celular.</p></div><div><span class="mode">SIMULACIÓN</span><button id="logout" class="secondary" type="button">Salir</button></div></header>
+  <nav class="tabs">
+    {% for key,label in [('overview','Resumen'),('markets','Mercados'),('paper','Operaciones'),('strategies','Decisiones'),('validation','Aprendizaje'),('system','Estado')] %}
+      <a href="/api/mobile?tab={{ key }}" class="{% if active_tab == key %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  {% if active_tab == 'overview' %}
+  <section class="grid">
+    <article class="card metric"><span>Efectivo disponible</span><strong id="cash">Cargando…</strong></article>
+    <article class="card metric"><span>Posiciones abiertas</span><strong id="openCount">Cargando…</strong></article>
+    <article class="card metric"><span>Total invertido</span><strong id="invested">Cargando…</strong></article>
+    <article class="card metric"><span>P&L flotante</span><strong id="pnl">Cargando…</strong></article>
+  </section>
+  <section class="card"><h2>Posiciones</h2><div id="positions" class="status">Consultando una sola vez…</div><button type="button" data-refresh="overview">Actualizar</button></section>
+  {% elif active_tab == 'markets' %}
+  <section class="card"><h2>Mercados</h2><div class="actions">{% for book in allowed_books %}<button type="button" class="secondary market" data-book="{{ book }}">{{ book|upper }}</button>{% endfor %}</div><div id="market" class="status">Toca un activo.</div></section>
+  <section class="card"><h2>Compra simulada manual</h2><form id="orderForm"><select id="book">{% for book in allowed_books %}<option value="{{ book }}">{{ book|upper }}</option>{% endfor %}</select><input id="amount" type="number" min="1" max="{{ max_order }}" value="50"><button type="submit">Comprar</button></form><div id="orderResult" class="status">Sin enviar.</div></section>
+  {% elif active_tab == 'paper' %}
+  <section class="card"><h2>Órdenes y simulaciones</h2><div id="paper" class="status">Consultando…</div><button type="button" data-refresh="paper">Actualizar</button></section>
+  {% elif active_tab == 'strategies' %}
+  <section class="card"><h2>Bot, decisiones y rendimiento</h2><div id="strategies" class="status">Consultando…</div><button type="button" data-refresh="strategies">Actualizar</button></section>
+  {% elif active_tab == 'validation' %}
+  <section class="card"><h2>Aprendizaje</h2><div id="validation" class="status">Consultando…</div><button type="button" data-refresh="validation">Actualizar</button></section>
+  {% else %}
+  <section class="card"><h2>Estado de la aplicación</h2><div id="system" class="status">Consultando…</div><button type="button" data-refresh="system">Actualizar</button></section>
+  {% endif %}
+</main>
+<script>
+const tab={{ active_tab|tojson }};
+const money=v=>Number(v||0).toLocaleString('es-MX',{style:'currency',currency:'MXN'});
+async function get(url,options={}){const c=new AbortController();const t=setTimeout(()=>c.abort(),6000);try{const r=await fetch(url,{cache:'no-store',signal:c.signal,headers:{'Content-Type':'application/json'},...options});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||'No respondió');return d}finally{clearTimeout(t)}}
+function show(id,value){const n=document.getElementById(id);if(n)n.textContent=typeof value==='string'?value:JSON.stringify(value,null,2)}
+async function load(){try{
+ if(tab==='overview'){const [c,p]=await Promise.all([get('/api/capital'),get('/api/positions')]);show('cash',money(c.available_cash_mxn));show('openCount',String(p.summary?.open_positions||0));show('invested',money(p.summary?.invested_mxn));show('pnl',money(p.summary?.unrealized_pnl_mxn));show('positions',(p.items||[]).length?(p.items||[]).map(x=>`${x.book} · ${x.source_label||x.source} · ${money(x.amount_mxn)}`).join('\n'):'No hay posiciones abiertas.');}
+ if(tab==='paper'){const [o,s]=await Promise.all([get('/api/orders?limit=10'),get('/api/simulations?limit=10')]);show('paper',JSON.stringify({ordenes:o.items||[],simulaciones:s.items||[]},null,2));}
+ if(tab==='strategies'){const [r,a,p]=await Promise.all([get('/runtime/status'),get('/adaptive/status'),get('/analytics/performance')]);show('strategies',JSON.stringify({runtime:r,estrategia:a,rendimiento:p},null,2));}
+ if(tab==='validation'){show('validation',await get('/validation/status'));}
+ if(tab==='system'){const [h,r]=await Promise.all([get('/health'),get('/ready')]);show('system',JSON.stringify({health:h,ready:r},null,2));}
+}catch(e){show(tab==='overview'?'positions':tab,e.name==='AbortError'?'La consulta tardó más de 6 segundos. La navegación sigue funcionando.':`Error: ${e.message}`)}}
+document.querySelectorAll('[data-refresh]').forEach(b=>b.addEventListener('click',load));
+document.querySelectorAll('.market').forEach(b=>b.addEventListener('click',async()=>{show('market','Consultando…');try{show('market',await get('/api/market/'+b.dataset.book))}catch(e){show('market','Error: '+e.message)}}));
+document.getElementById('orderForm')?.addEventListener('submit',async e=>{e.preventDefault();show('orderResult','Enviando…');try{const d=await get('/api/orders',{method:'POST',body:JSON.stringify({book:document.getElementById('book').value,side:'buy',amount_mxn:Number(document.getElementById('amount').value),daily_pnl_mxn:0,open_orders:0})});show('orderResult',d)}catch(e){show('orderResult','Error: '+e.message)}});
+document.getElementById('logout').addEventListener('click',async()=>{await get('/api/logout',{method:'POST'});location.href='/'});
+load();
+</script>
+</body></html>

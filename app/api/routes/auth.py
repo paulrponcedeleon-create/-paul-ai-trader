@@ -13,6 +13,7 @@ from app.api.dependencies import (
 from app.api.routes.account import router as account_router
 from app.api.routes.capital import router as capital_router
 from app.api.routes.markets import router as markets_router
+from app.api.routes.mobile_lite import router as mobile_lite_router
 from app.api.routes.order_events import router as order_events_router
 from app.api.routes.partial_closes import router as partial_closes_router
 from app.api.routes.performance_summary import router as performance_summary_router
@@ -41,6 +42,7 @@ router.include_router(order_events_router)
 router.include_router(partial_closes_router)
 router.include_router(performance_summary_router)
 router.include_router(account_router)
+router.include_router(mobile_lite_router)
 
 
 def _start_session(request: Request, user) -> None:
